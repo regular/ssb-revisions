@@ -121,13 +121,14 @@ exports.init = function (ssb, config) {
     )
   }
 
-  s.history = function(key) {
+  s.history = function(key, opts) {
+    opts = opts || {}
     return pull(
       s.read({
         keys: true,
         values: false,
-        live: true,
-        sync: true,
+        live: opts.live,
+        sync: opts.sync,
         gte: key,
         lt: key + String.fromCharCode('%'.charCodeAt(0)+1)
       }),

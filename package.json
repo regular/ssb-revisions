@@ -4,12 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tape test.js"
   },
   "author": "Jan Bölsche <jan@lagomorph.de> (https://regular.codes/)",
   "license": "ISC",
   "dependencies": {
     "flumelog-level": "0.0.4",
+    "flumeview-level": "^3.0.4",
     "scuttlebot": "^11.3.0"
+  },
+  "devDependencies": {
+    "flumecodec": "0.0.1",
+    "flumedb": "^0.4.6",
+    "flumelog-offset": "^3.2.6",
+    "tape": "^4.9.0"
   }
 }
