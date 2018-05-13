@@ -16,7 +16,7 @@ function msg(key, revisionRoot, revisionBranch) {
     value: {
       content: {
         revisionRoot,
-        revisionBranch
+        revisionBranch 
       }
     }
   }
@@ -24,7 +24,7 @@ function msg(key, revisionRoot, revisionBranch) {
 
 function fresh() {
   const db =  Flume(OffsetLog(
-    '/tmp/test-ssb-revisions-'+Date.now(),
+    '/tmp/test-ssb-revisions-' + rndKey(),
     {blockSize: 1024, codec}
   ))
   return {db, revs: Revisions.init({
@@ -35,7 +35,7 @@ function fresh() {
   })}
 }
 
-test('A message without revisions should have an empty history', t => {
+test('A message without revisions should have no history', t => {
   const {db, revs} = fresh()
 
   const keyA = rndKey()
@@ -45,9 +45,31 @@ test('A message without revisions should have an empty history', t => {
       pull.collect( (err, result) => {
         t.notOk(err, 'no error')
         t.equal(result.length, 0, 'history should be empty')
+        db.close( ()=> t.end())
+      })
+    )
+  })
+})
+
+test('Revisions show up in history', t => {
+  const {db, revs} = fresh()
+
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  db.append([
+    msg(keyA),
+    msg(keyB, keyA, [keyA]),
+    msg(keyC, keyA, [keyB])
+  ], (err, data) => {
+    pull(
+      revs.history(keyA),
+      pull.collect( (err, result) => {
+        t.notOk(err, 'no error')
+        t.equal(result.length, 2, 'history should have two entries')
         t.end()
       })
     )
   })
-
 })
+
