@@ -9,9 +9,8 @@
   "author": "Jan Bölsche <jan@lagomorph.de> (https://regular.codes/)",
   "license": "ISC",
   "dependencies": {
-    "flumelog-level": "0.0.4",
-    "flumeview-level": "^3.0.4",
-    "scuttlebot": "^11.3.0"
+    "flumeview-reduce": "^1.3.13",
+    "ssb-sort": "^1.1.0"
   },
   "devDependencies": {
     "flumecodec": "0.0.1",

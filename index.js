@@ -1,75 +1,6 @@
 const pull = require('pull-stream')
-const ViewLevel = require('flumeview-level')
-
-// TODO: can we use original, now that we do not support drafts here?
-const ssbsort = require('./ssb-sort')(links, breakTie)
-
-// taken from ssb-cms/update-stream.js
-
-function links(value, each) {
-  if (!value) return
-  const links = (value.content && value.content.revisionBranch) || []
-  links.forEach(each)
-}
-
-function breakTie(a, b) {
-  return (
-    //declared timestamp, may by incorrect or a lie
-    (b.value.timestamp - a.value.timestamp) ||
-    //finially, sort hashes lexiegraphically.
-    (a.key > b.key ? -1 : a.key < b.key ? 1 : 0)
-  )
-}
-
-function getHeads(revisions, isTrustedKey) {
-  isTrustedKey = isTrustedKey || (() => true)
-  let heads = ssbsort.heads(revisions)
-
-  const revs = {}
-  revisions.forEach( kv => revs[kv.key] = kv )
-
-  function trusted(kv) {
-    let newestTrusted 
-    function recurse(key) {
-      let kv = revs[key]
-      if (!kv) return
-      
-      // too old
-      if (
-        newestTrusted &&
-        newestTrusted.value.timestamp > kv.value.timestamp
-      ) {
-        return
-      }
-      
-      // not trusted
-      if (
-        !isTrustedKey(kv.value.author)
-      ) {
-        return links(kv.value, recurse)
-      }
-      
-      newestTrusted = kv
-    }
-
-    if (
-      isTrustedKey(kv.value.author)
-    ) {
-      return kv
-    }
-    links(kv.value, recurse)
-    //console.log('trusted',kv,newestTrusted)
-    return newestTrusted
-  }
-
-  // sort trusted heads, newest first
-  return heads.map(k => trusted(revs[k])).filter( x=>x ).sort(breakTie)
-}
-
-function headFingerprint(heads) {
-  console.log('heads', heads)
-  return heads.map( kv => kv.key ).join('-')
-}
+const createReduce = require('flumeview-reduce/inject')
+const ssbsort = require('ssb-sort')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -78,106 +9,112 @@ exports.manifest = {
   heads: 'source'
 }
 
-function parseIndex({key}) {
-  const l = key.split('%').slice(1) // starts with delimiter
-  const revisionRoot = '%' + l.splice(0, 1)[0]
-  const timestamp = Number(l.pop())
-  const msgId = '%' + l.pop()
-  const revisionBranch = l.map( x => `%${x}` )
-  return {
-    key: msgId,
-    value: {
-      timestamp,
-      content: {
-        revisionRoot,
-        revisionBranch
-      }
-    }
-  }
-}
-
 exports.init = function (ssb, config) {
-  const s = ssb._flumeUse('revisions', ViewLevel(8, kv => {
-    //console.log(JSON.stringify(kv, null, 2))
-    const revRoot = (kv.value && kv.value.content && kv.value.content.revisionRoot)
-    if (!revRoot || revRoot == kv.key) return []
-    let revBranch = (kv.value && kv.value.content && kv.value.content.revisionBranch) || []
-    if (!Array.isArray(revBranch)) revBranch = [revBranch]
-    const ret = [revRoot].concat(revBranch).concat([kv.key, '%' + kv.value.timestamp]).join('')
-    console.log(ret)
-    return [ret]
+  const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
+  const s = ssb._flumeUse('revisions', createReduce(Store)(16, {
+    initial: {},
+    map: function(kv) {
+      const timestamp = kv.value && kv.value.timestamp
+      const c = kv.value && kv.value.content
+      const revisionRoot = c && c.revisionRoot
+      const revisionBranch = (c && c.revisionBranch) || []
+      if (!revisionRoot) return null
+      return {
+        key: kv.key,
+        timestamp,
+        revisionRoot,
+        revisionBranch: ary(revisionBranch)
+      }
+    },
+    reduce: function (acc, {key, revisionRoot, revisionBranch, timestamp}, seq) {
+      let a
+      acc[revisionRoot] = (a = acc[revisionRoot] || {revisions: []})
+      a.revisions.push({key, revisionBranch, timestamp})
+      a.heads = heads(a.revisions.map(toMsg(revisionRoot)))
+      return acc
+    }
   }))
 
-  function getAllRevs(key, cb) {
-    pull(
-      s.read({
-        keys: true,
-        values: false,
-        gte: key,
-        lt: key + String.fromCharCode('%'.charCodeAt(0)+1)
-      }),
-      pull.map(parseIndex),
-      pull.collect(cb)
-    )
-  }
-
-  s.history = function(key, opts) {
+  s.history = function(revRoot, opts) {
     opts = opts || {}
+    let i = 0
     return pull(
-      s.read({
-        keys: true,
-        values: false,
-        live: opts.live,
-        sync: opts.sync,
-        gte: key,
-        lt: key + String.fromCharCode('%'.charCodeAt(0)+1)
+      s.stream(opts),
+      pull.map( v => {
+        if (i++ == 0) {
+          // the first item is the recuced state
+          return v[revRoot] && v[revRoot].revisions.map(toMsg(revRoot))
+        }
+        // all other items are the output of map
+        return v.revisionRoot == revRoot ? [toMsg(revRoot)(v)] : null
       }),
-      pull.map(kv => {
-        console.log(kv)
-        // TODO: we do not get sync from flumeview.read()?
-        return kv.key ? parseIndex(kv) : {sync: true}
-      })
+      pull.filter(),
+      pull.flatten()
     )
   }
 
-  s.heads = function(key) {
-    let synced = false
+  s.heads = function(revRoot, opts) {
+    opts = opts || {}
+    let i = 0
+    let acc
     return pull(
-      s.read(Object.assign({
-        keys: true,
-        values: false,
-        live: true
-      }, key ? {
-        gte: key,
-        lt: key + String.fromCharCode('%'.charCodeAt(0)+1)
-      } : {})),
-      pull.map(kv => {
-        // TODO: we do not get sync from flumeview.read()?
-        return kv.key ? parseIndex(kv) : {sync: true}
+      s.stream(opts),
+      pull.map( v => {
+        console.log(JSON.stringify(v, null, 2))
+        if (i++ == 0) {
+          // the first item is the recuced state
+          acc = v
+          return v[revRoot] && v[revRoot].heads
+        }
+        // all other items are the output of map
+        if (v.revisionRoot == revRoot) {
+          //const {key, revisionBranch} = v
+          //revs.push({key, revisionBranch})
+          //console.log('revs', JSON.stringify(revs, null, 2))
+          //Since revs is the array used by the reduce function,
+          //it will already contain the new revision,
+          //and the heads will also already be calculated!
+          //return heads(revs.map(toMsg(revRoot)))
+          return acc[revRoot].heads
+        }
       }),
-      pull.filter( kv => {
-        return !kv.sync
-      }),
-      pull.through( kv => {
-        console.log(kv)
-      }),
-      pull.asyncMap( (kv, cb) => {
-        getAllRevs(kv.value.content.revisionRoot, (err, revs) => {
-          if (err) return cb(err)
-          cb(null, getHeads(revs))
-        })
-      }),
-      (function() {
-        let last
-        return pull.filter( heads => {
-          const fp = headFingerprint(heads)
-          if (last === fp) return false
-          last = fp
-          return true
-        })
-      })()
+      pull.filter()
     )
   }
   return s
+}
+
+// utils ///////
+
+function ary(x) {
+  return Array.isArray(x) ? x : [x]
+}
+
+function heads(msgs) {
+  const hds = ssbsort.heads(msgs)
+  const revs = msgs.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
+  return hds.map( k => revs[k] ).sort(compare).map( kv => kv.key )
+}
+
+function compare(a, b) {
+  return (
+    //declared timestamp, may by incorrect or a lie
+    (b.value.timestamp - a.value.timestamp) ||
+    //finially, sort hashes lexiegraphically.
+    (a.key > b.key ? -1 : a.key < b.key ? 1 : 0)
+  )
+}
+
+function toMsg(revisionRoot) {
+  return function(r) {
+    const {key, revisionBranch, timestamp} = r
+    return {
+      key,
+      value: {
+        timestamp,
+        content: {revisionRoot, revisionBranch}
+      }
+    }
+  }
 }
 
