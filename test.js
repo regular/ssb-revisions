@@ -144,29 +144,30 @@ test('heads({live: true}): fork', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
   const keyC = rndKey()
-  let i = 0
 
   const a = msg(keyA)
   const b = msg(keyB, keyA, [keyA])
   const c = msg(keyC, keyA, [keyA])
 
-  db.append([a,c], (err, data) => {
+  let i = 0
+
+  db.append([a, c], (err, data) => {
     pull(
       db.revisions.heads(keyA, {live: true}),
-      pull.drain( heads => {
+      pull.drain( x => {
         i++
         if (i==1) {
-          t.deepEqual(heads, [keyC])
+          t.deepEqual(x, {heads: [{key: keyC}]})
           setImmediate( ()=> {
             db.append( b, ()=>{} )
           })
           return
         }
         if (i==2) {
-          t.equals(heads.length, 2, 'There are two heads')
-          console.log(heads)
-          t.equals(heads[0], keyC, 'Winning head is keyC')
-          t.equals(heads[1], keyB, 'keyB is secondary head')
+          t.equals(x.heads.length, 2, 'There are two heads')
+          console.log(x)
+          t.deepEqual(x.heads[0], {key: keyC}, 'Winning head is keyC')
+          t.deepEqual(x.heads[1], {key: keyB}, 'keyB is secondary head')
           return false
         }
         t.fail('stream too long')
@@ -179,5 +180,53 @@ test('heads({live: true}): fork', (t, db) => {
   })
 })
 
+test('meta: forks', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
 
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyA]) // fork
+  const d = msg(keyD, keyA, [keyB, keyC]) // merge
+
+  let i = 0
+
+  pull(
+    db.revisions.stats({live: true}),
+    pull.drain( s=> {
+      t.equals(s.forks, [0,1,0][i++])
+    }, err => {
+      t.notOk(err, 'no error')
+      t.equals(i, 3, 'three status updates')
+      t.end()
+    })
+  )
+
+  db.append([a, b, c], err => {
+    if (err) throw err
+    pull(
+      db.revisions.heads(keyA, {meta: true}),
+      pull.collect( (err, items) => {
+        t.notOk(err, 'no error')
+        t.equals(items.length, 1)
+        t.equals(items[0].meta.forked, true, 'meta indicates a fork')
+
+        db.append(d, err =>{
+          if (err) throw err
+          pull(
+            db.revisions.heads(keyA, {meta: true}),
+            pull.collect( (err, items) => {
+              t.notOk(err, 'no error')
+              t.equals(items.length, 1)
+              t.notOk(items[0].meta.forked, 'meta indicates no fork')
+              db.close( ()=>{} )
+            })
+          )
+        })
+      })
+    )
+  })
+})
 

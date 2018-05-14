@@ -5,14 +5,19 @@ const ssbsort = require('ssb-sort')
 exports.name = 'revisions'
 exports.version = require('./package.json').version
 exports.manifest = {
+  stats: 'source',
   history: 'source',
   heads: 'source'
 }
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
-  const s = ssb._flumeUse('revisions', createReduce(Store)(16, {
-    initial: {},
+  const s = ssb._flumeUse('revisions', createReduce(Store)(17, {
+    initial: {
+      stats: {
+        forks: 0
+      }
+    },
     map: function(kv) {
       const timestamp = kv.value && kv.value.timestamp
       const c = kv.value && kv.value.content
@@ -30,7 +35,10 @@ exports.init = function (ssb, config) {
       let a
       acc[revisionRoot] = (a = acc[revisionRoot] || {revisions: []})
       a.revisions.push({key, revisionBranch, timestamp})
+      const was_forked = a.heads && a.heads.length > 1
       a.heads = heads(a.revisions.map(toMsg(revisionRoot)))
+      if (!was_forked && a.heads.length > 1) acc.stats.forks++
+      else if (was_forked && a.heads.length == 1) acc.stats.forks--
       return acc
     }
   }))
@@ -53,6 +61,7 @@ exports.init = function (ssb, config) {
 
   s.heads = function(revRoot, opts) {
     opts = opts || {}
+    opts.keys = opts.keys == undefined ? true : opts.keys
     let acc
     return pull(
       s.stream(opts),
@@ -66,13 +75,46 @@ exports.init = function (ssb, config) {
           acc[revRoot].heads
           : null
       ),
-      pull.filter()
+      pull.filter(),
+      pull.map( heads => {
+        const result = {}
+        if (opts.meta) {
+          const m = result.meta = {}
+          if (heads.length > 1) m.forked = true
+        }
+        result.heads = heads.map( key => {
+          return {key}
+        })
+        return result
+      })
+    )
+  }
+  s.stats = function(opts) {
+    opts = opts || {}
+    let acc
+    return pull(
+      s.stream(opts),
+      mapFirst(
+        _acc => (acc = _acc, acc.stats),
+        v => acc.stats
+      ),
+      filterRepeated( x => JSON.stringify(x) )
     )
   }
   return s
 }
 
 // utils ///////
+
+function filterRepeated(f) {
+  let last
+  return pull.filter( x => {
+    const y = f(x)
+    const ret = last != y
+    last = y
+    return ret
+  })
+}
 
 function mapFirst(m1, m2) {
   let first = true
