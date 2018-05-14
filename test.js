@@ -180,7 +180,7 @@ test('heads({live: true}): fork', (t, db) => {
   })
 })
 
-test('meta: forks', (t, db) => {
+test('meta/stats: forks', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
   const keyC = rndKey()
@@ -196,7 +196,10 @@ test('meta: forks', (t, db) => {
   pull(
     db.revisions.stats({live: true}),
     pull.drain( s=> {
-      t.equals(s.forks, [0,1,0][i++])
+      console.log(s)
+      t.equals(s.forks, [0,1,0][i])
+      t.equals(s.incomplete, [0,0,0][i])
+      i++
     }, err => {
       t.notOk(err, 'no error')
       t.equals(i, 3, 'three status updates')
@@ -221,6 +224,57 @@ test('meta: forks', (t, db) => {
               t.notOk(err, 'no error')
               t.equals(items.length, 1)
               t.notOk(items[0].meta.forked, 'meta indicates no fork')
+              db.close( ()=>{} )
+            })
+          )
+        })
+      })
+    )
+  })
+})
+
+test('meta/stats: incomplete', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyB])
+
+  let i = 0
+
+  pull(
+    db.revisions.stats({live: true}),
+    pull.drain( s=> {
+      console.log(s)
+      t.equals(s.incomplete, [0,1,0][i])
+      t.equals(s.forks, [0,0,0][i])
+      i++
+    }, err => {
+      t.notOk(err, 'no error')
+      t.equals(i, 3, 'three status updates')
+      t.end()
+    })
+  )
+
+  db.append([a, c], err => {
+    if (err) throw err
+    pull(
+      db.revisions.heads(keyA, {meta: true}),
+      pull.collect( (err, items) => {
+        t.notOk(err, 'no error')
+        t.equals(items.length, 1)
+        t.equals(items[0].meta.incomplete, true, 'meta indicates incomplete chain of revisions')
+
+        db.append(b, err =>{
+          if (err) throw err
+          pull(
+            db.revisions.heads(keyA, {meta: true}),
+            pull.collect( (err, items) => {
+              t.notOk(err, 'no error')
+              t.equals(items.length, 1)
+              t.notOk(items[0].meta.incomplete, 'meta indicates completeness')
               db.close( ()=>{} )
             })
           )

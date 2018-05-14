@@ -12,10 +12,11 @@ exports.manifest = {
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
-  const s = ssb._flumeUse('revisions', createReduce(Store)(17, {
+  const s = ssb._flumeUse('revisions', createReduce(Store)(18, {
     initial: {
       stats: {
-        forks: 0
+        forks: 0,
+        incomplete: 0
       }
     },
     map: function(kv) {
@@ -34,11 +35,19 @@ exports.init = function (ssb, config) {
     reduce: function (acc, {key, revisionRoot, revisionBranch, timestamp}, seq) {
       let a
       acc[revisionRoot] = (a = acc[revisionRoot] || {revisions: []})
+      const was_incomplete = incomplete(a.revisions, revisionRoot)
       a.revisions.push({key, revisionBranch, timestamp})
+      const is_incomplete = incomplete(a.revisions, revisionRoot)
+
       const was_forked = a.heads && a.heads.length > 1
       a.heads = heads(a.revisions.map(toMsg(revisionRoot)))
+
+      if (!was_incomplete && is_incomplete) acc.stats.incomplete++
+      else if (was_incomplete && !is_incomplete) acc.stats.incomplete--
+
       if (!was_forked && a.heads.length > 1) acc.stats.forks++
       else if (was_forked && a.heads.length == 1) acc.stats.forks--
+      
       return acc
     }
   }))
@@ -67,20 +76,21 @@ exports.init = function (ssb, config) {
       s.stream(opts),
       mapFirst(
         _acc => (
-          acc = _acc, (acc[revRoot] && acc[revRoot].heads)
+          acc = _acc, acc[revRoot]
         ),
         v => v.revisionRoot == revRoot ?
           //acc will already contain the new revision,
           //and the heads will also already be calculated!
-          acc[revRoot].heads
+          acc[revRoot]
           : null
       ),
       pull.filter(),
-      pull.map( heads => {
+      pull.map( ({revisions, heads}) => {
         const result = {}
         if (opts.meta) {
           const m = result.meta = {}
           if (heads.length > 1) m.forked = true
+          if (incomplete(revisions, revRoot)) m.incomplete = true
         }
         result.heads = heads.map( key => {
           return {key}
@@ -127,6 +137,18 @@ function mapFirst(m1, m2) {
 
 function ary(x) {
   return Array.isArray(x) ? x : [x]
+}
+
+function incomplete(msgs, revRoot) {
+  // NOTE: we assume that revisionRoot is present
+  // (this limits the actual value of this function)
+  const revs = msgs.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {[revRoot]: true})
+  for(let m of msgs) {
+    for(let b of m.revisionBranch) {
+      if (!revs[b]) return true
+    }
+  }
+  return false
 }
 
 function heads(msgs) {
