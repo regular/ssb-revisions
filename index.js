@@ -12,11 +12,12 @@ exports.manifest = {
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
-  const s = ssb._flumeUse('revisions', createReduce(Store)(18, {
+  const s = ssb._flumeUse('revisions', createReduce(Store)(19, {
     initial: {
       stats: {
         forks: 0,
-        incomplete: 0
+        incomplete: 0,
+        revisions: 0
       }
     },
     map: function(kv) {
@@ -24,7 +25,7 @@ exports.init = function (ssb, config) {
       const c = kv.value && kv.value.content
       const revisionRoot = c && c.revisionRoot
       const revisionBranch = (c && c.revisionBranch) || []
-      if (!revisionRoot) return null
+      if (!revisionRoot || !revisionBranch) return null
       return {
         key: kv.key,
         timestamp,
@@ -33,6 +34,8 @@ exports.init = function (ssb, config) {
       }
     },
     reduce: function (acc, {key, revisionRoot, revisionBranch, timestamp}, seq) {
+      acc.stats.revisions++
+      
       let a
       acc[revisionRoot] = (a = acc[revisionRoot] || {revisions: []})
       const was_incomplete = incomplete(a.revisions, revisionRoot)
