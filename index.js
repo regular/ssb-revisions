@@ -37,17 +37,15 @@ exports.init = function (ssb, config) {
 
   s.history = function(revRoot, opts) {
     opts = opts || {}
-    let i = 0
     return pull(
       s.stream(opts),
-      pull.map( v => {
-        if (i++ == 0) {
-          // the first item is the recuced state
-          return v[revRoot] && v[revRoot].revisions.map(toMsg(revRoot))
-        }
-        // all other items are the output of map
-        return v.revisionRoot == revRoot ? [toMsg(revRoot)(v)] : null
-      }),
+      // the first item is the recuced state
+      // all other items are the output of map
+      mapFirst(
+        acc => acc[revRoot] && acc[revRoot].revisions.map(toMsg(revRoot))
+        ,
+        v => v.revisionRoot == revRoot ? [toMsg(revRoot)(v)] : null
+      ),
       pull.filter(),
       pull.flatten()
     )
@@ -55,29 +53,19 @@ exports.init = function (ssb, config) {
 
   s.heads = function(revRoot, opts) {
     opts = opts || {}
-    let i = 0
     let acc
     return pull(
       s.stream(opts),
-      pull.map( v => {
-        console.log(JSON.stringify(v, null, 2))
-        if (i++ == 0) {
-          // the first item is the recuced state
-          acc = v
-          return v[revRoot] && v[revRoot].heads
-        }
-        // all other items are the output of map
-        if (v.revisionRoot == revRoot) {
-          //const {key, revisionBranch} = v
-          //revs.push({key, revisionBranch})
-          //console.log('revs', JSON.stringify(revs, null, 2))
-          //Since revs is the array used by the reduce function,
-          //it will already contain the new revision,
+      mapFirst(
+        _acc => (
+          acc = _acc, (acc[revRoot] && acc[revRoot].heads)
+        ),
+        v => v.revisionRoot == revRoot ?
+          //acc will already contain the new revision,
           //and the heads will also already be calculated!
-          //return heads(revs.map(toMsg(revRoot)))
-          return acc[revRoot].heads
-        }
-      }),
+          acc[revRoot].heads
+          : null
+      ),
       pull.filter()
     )
   }
@@ -85,6 +73,15 @@ exports.init = function (ssb, config) {
 }
 
 // utils ///////
+
+function mapFirst(m1, m2) {
+  let first = true
+  return pull.map( function(x) {
+    const result = first ? m1(x) : m2(x)
+    first = false
+    return result
+  })
+}
 
 function ary(x) {
   return Array.isArray(x) ? x : [x]
