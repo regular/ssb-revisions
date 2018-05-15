@@ -48,6 +48,7 @@ function fresh(cb) {
   ))
  
   Revisions.init({
+    get: db.get,
     _flumeUse: (name, view) => {
       db.use(name, view)
       const sv = db[name]

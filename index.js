@@ -1,4 +1,5 @@
 const pull = require('pull-stream')
+const paramap = require('pull-paramap')
 const createReduce = require('flumeview-reduce/inject')
 const ssbsort = require('ssb-sort')
 
@@ -67,13 +68,23 @@ exports.init = function (ssb, config) {
         v => v.revisionRoot == revRoot ? [toMsg(revRoot)(v)] : null
       ),
       pull.filter(),
-      pull.flatten()
+      pull.flatten(),
+      pull.asyncMap( (kv, cb) => {
+        const key = kv.key
+        if (opts.values == false) delete kv.value
+        if (opts.keys == false) delete kv.key
+        if (opts.values !== true) return cb(null, kv)
+        ssb.get(key, (err, value) => {
+          kv.value = value
+          cb(err, kv)
+        })
+      }),
+      stripSingleKey()
     )
   }
 
   s.heads = function(revRoot, opts) {
     opts = opts || {}
-    opts.keys = opts.keys == undefined ? true : opts.keys
     let acc
     return pull(
       s.stream(opts),
@@ -88,18 +99,42 @@ exports.init = function (ssb, config) {
           : null
       ),
       pull.filter(),
-      pull.map( ({revisions, heads}) => {
+      pull.asyncMap( ({revisions, heads}, cb) => {
         const result = {}
         if (opts.meta) {
           const m = result.meta = {}
           if (heads.length > 1) m.forked = true
           if (incomplete(revisions, revRoot)) m.incomplete = true
         }
-        result.heads = heads.map( key => {
-          return {key}
-        })
-        return result
-      })
+        result.heads = heads.map( key => ({key}) )
+        if (!opts.values) return cb(null, result)
+        pull(
+          pull.values(result.heads),
+          paramap( (h, cb) => ssb.get(h.key, (err, value) => {
+            cb(err, h.value = value)
+          })),
+          pull.collect( err => cb(err, result) )
+        )
+      }),
+      pull.asyncMap( (result, cb) => {
+        pull(
+          pull.values(result.heads),
+          opts.maxHeads ? pull.take(opts.maxHeads) : pull.through(),
+          pull.through( h => {
+            if (opts.keys == false) delete h.key
+          }),
+          stripSingleKey(),
+          pull.collect( (err, heads) => {
+            if (opts.keys == false && opts.values == false) {
+              delete result.heads
+            } else {
+              result.heads = heads
+            }
+            cb(err, result)
+          })
+        )
+      }),
+      stripSingleKey()
     )
   }
   s.stats = function(opts) {
@@ -118,6 +153,15 @@ exports.init = function (ssb, config) {
 }
 
 // utils ///////
+
+function stripSingleKey() {
+  return pull.map( kv => {
+    if (Object.keys(kv).length == 1) {
+      for(let k in kv) return kv[k]
+    }
+    return kv
+  })
+}
 
 function filterRepeated(f) {
   let last

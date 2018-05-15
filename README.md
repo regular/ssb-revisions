@@ -14,57 +14,73 @@
 
 - get the history of a message/an object and optionally get live updates whenever it changes
 
-`revisions.history(revisionRoot, {live}) -> ssb-sort`
+`revisions.history(revisionRoot, {live, keys, values})
+
+- options are
+  - live: get live updates when a new revision is published
+  - keys: include keys in output (default: true)
+  - values: 
+    - false: do not include values
+    - `undefined`: (default) include stripped-down values (more efficient)
+    - true: include complete values
 
 **NOTE** revisions are streamed unordered. To sort them, use ssb-sort.
 
-- get or observe the current heads of an object, most current head first.
+- stream current heads of an object, most current head first.
 
-`revisions.heads(revisionRoot, {live, keys, values, meta})
+`revisions.heads(revisionRoot, {live, keys, values, meta, maxHeads})
  
 - format is
 
 {
+  meta: {
+ TODO:   heads: n,
+    incomplete: bool,
+ TODO:   change_requests: n,
+  },
   heads: [{
-    key: revision,
-    value: optional message velaue
+    key: 
+    value: 
   },
    ...
   ]
 }
 
-- get current head only (get latest reviion of a given object)
-
-`revisions.head([revRoot], {live, values})
-
 - options
   - live: stream live changes
   - meta: include meta data (see below)
-  - values: include values
-  - keys: include keys (default: true) 
+  - values: include values (default is false)
+  - keys: include keys (default is true) 
 
-- format is
+**NOTE** if there's just one key in an object, the object collapses that key's value.
 
+Example:
+
+```
+$ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" --m eta
 {
-  meta: {
-    forked: bool, // true, if ther is more than one head
-    incomplete: bool, // true, if revisions are missing
-    change_request: bool // true, if a later, untrusted head exists
+  "meta": {
+    "heads": 2,
+    "forked": true
   },
-  head: {
-    key: revision,
-    value: optional message velaue
-  }
+  "heads": [
+    "%9ET2dmQhx9oAnVp1UxWycp1siCR2fwR1XRiw9f2eIrU=.sha256",
+    "%fXSWgOSZJQaX+Ouur0N+INMOfmatw3MwOFQR3NsjYAo=.sha256"
+  ]
 }
 
-- edit a message in your favourite $EDITOR
+$ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256"   
+[
+  "%9ET2dmQhx9oAnVp1UxWycp1siCR2fwR1XRiw9f2eIrU=.sha256",
+  "%fXSWgOSZJQaX+Ouur0N+INMOfmatw3MwOFQR3NsjYAo=.sha256"
+]
+
+```
+
+- TODO: edit a message in your favourite $EDITOR
 
 `revisions.edit(revRoot-or-revBrabh)`
 
-- update message content from stdin
+- TODO: update message content from stdin
 
 `revisions.update(revRoot-or-revBrabh)`
-
-- git diff, but for revisions
-
-maybe not, the impl would have nothing to do with revs, just comparing two msgs. Should be a sh scripy instead.
