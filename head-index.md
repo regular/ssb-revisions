@@ -8,4 +8,4 @@ The record contains the list of revisions and the heads, and/or roots, other met
 
 Since reduce needs to be a sync function, it will have to maintain a write-queue to write to leveldb asynchronously: It builds up batch writes until a previous write succeeds. (use async-single)
 
-This way, clients can ask for specifically the heads of the revRoot(s) they are interested in, instead of having to get the entire reduce-view on application start.
+This way, writes of the index should be much more efficient. (TODO: benchmark)
