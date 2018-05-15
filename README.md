@@ -1,3 +1,15 @@
+# ssb-revisions
+mutable documents for secure scuttlebutt
+
+## Installation
+
+Make sure sbot is running, do
+
+`$ sbot plugins.install ssb-revisions`
+
+and restart sbot.
+
+
 ## API
 
 ### `revisions.stats({live})`
@@ -14,7 +26,7 @@ get statistics
 }
 ```
 
-### `revisions.history(revisionRoot, {live, keys, values})
+### `revisions.history(revisionRoot, {live, keys, values})`
 
 get the history of a document/an object and optionally get live updates whenever it changes
 
@@ -28,7 +40,7 @@ get the history of a document/an object and optionally get live updates whenever
 
 > **NOTE** revisions are streamed unordered. To sort them, use ssb-sort.
 
-### `revisions.heads(revisionRoot, {live, keys, values, meta, maxHeads})
+### `revisions.heads(revisionRoot, {live, keys, values, meta, maxHeads})`
 
 stream current heads of an object, most current head first.
 
@@ -61,7 +73,7 @@ stream current heads of an object, most current head first.
 Example:
 
 ```
-$ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" --m eta
+$ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" --meta
 {
   "meta": {
     "heads": 2,
