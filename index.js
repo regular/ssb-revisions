@@ -8,10 +8,11 @@ exports.version = require('./package.json').version
 exports.manifest = {
   stats: 'source',
   history: 'source',
-  heads: 'source'
+  heads: 'source',
+  current: 'source'
 }
 
-const IDXVER=26
+const IDXVER=28
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
@@ -60,15 +61,17 @@ exports.init = function (ssb, config) {
       return acc
     }
   })
-  const s = ssb._flumeUse('revisions', (log, name) => {
+  let log
+  const s = ssb._flumeUse('revisions', (_log, name) => {
+    log = _log
     const ret = Reduce(log, name)
     const _createSink = ret.createSink
     ret.createSink = function() {
       return pull(
         pull.through(x=>{
-          /*console.log(
+          console.log('indexing',
             JSON.stringify(x, null, 2)
-          )*/
+          )
           x.value._seq = x.seq // expose seq to map function
         }),
         _createSink()
@@ -159,6 +162,39 @@ exports.init = function (ssb, config) {
       stripSingleKey()
     )
   }
+
+  // stream current heads of all revroots
+  s.current = function(opts) {
+    opts = opts || {}
+    let acc
+    return pull(
+      s.stream(opts),
+      mapFirst(
+        _acc => (acc = _acc, Object.keys(acc).filter(k=>k!=='stats').map(k=>acc[k])  ),
+        v => v ?
+          //acc will already contain the new revision,
+          //and the heads will also already be calculated!
+          [acc[v.revisionRoot]]
+          : []
+      ),
+      pull.flatten(),
+      pull.map(({heads, revisions}) => {
+        return heads.map(k => revisions.find(r=>r.key == k).seq )
+      }),
+      pull.through(console.log),
+      pull.asyncMap( (heads, cb) => {
+        log.get(heads[0], (err, value) => {
+          if (err) return cb(err)
+          cb(null, {
+            value,
+            seq: heads[0],
+            forked: heads.length > 1
+          })
+        })
+      })
+    )
+  }
+
   s.stats = function(opts) {
     opts = opts || {}
     let acc
