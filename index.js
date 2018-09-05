@@ -11,9 +11,12 @@ exports.manifest = {
   heads: 'source'
 }
 
+const IDXVER=26
+
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
-  const s = ssb._flumeUse('revisions', createReduce(Store)(19, {
+  
+  const Reduce = createReduce(Store)(IDXVER, {
     initial: {
       stats: {
         forks: 0,
@@ -22,12 +25,14 @@ exports.init = function (ssb, config) {
       }
     },
     map: function(kv) {
+      const seq = kv._seq
       const timestamp = kv.value && kv.value.timestamp
       const c = kv.value && kv.value.content
       const revisionRoot = c && c.revisionRoot
       const revisionBranch = (c && c.revisionBranch) || []
       if (!revisionRoot || !revisionBranch) return null
       return {
+        seq,
         key: kv.key,
         timestamp,
         revisionRoot,
@@ -40,7 +45,7 @@ exports.init = function (ssb, config) {
       let a
       acc[revisionRoot] = (a = acc[revisionRoot] || {revisions: []})
       const was_incomplete = incomplete(a.revisions, revisionRoot)
-      a.revisions.push({key, revisionBranch, timestamp})
+      a.revisions.push({key, seq, revisionBranch, timestamp})
       const is_incomplete = incomplete(a.revisions, revisionRoot)
 
       const was_forked = a.heads && a.heads.length > 1
@@ -54,7 +59,24 @@ exports.init = function (ssb, config) {
       
       return acc
     }
-  }))
+  })
+  const s = ssb._flumeUse('revisions', (log, name) => {
+    const ret = Reduce(log, name)
+    const _createSink = ret.createSink
+    ret.createSink = function() {
+      return pull(
+        pull.through(x=>{
+          /*console.log(
+            JSON.stringify(x, null, 2)
+          )*/
+          x.value._seq = x.seq // expose seq to map function
+        }),
+        _createSink()
+      )
+    }
+    return ret
+  })
+
 
   s.history = function(revRoot, opts) {
     opts = opts || {}
