@@ -158,17 +158,17 @@ test('heads({live: true}): fork', (t, db) => {
       pull.drain( x => {
         i++
         if (i==1) {
-          t.deepEqual(x, {heads: [{key: keyC}]})
+          t.deepEqual(x, [keyC])
           setImmediate( ()=> {
             db.append( b, ()=>{} )
           })
           return
         }
         if (i==2) {
-          t.equals(x.heads.length, 2, 'There are two heads')
+          t.equals(x.length, 2, 'There are two heads')
           console.log(x)
-          t.deepEqual(x.heads[0], {key: keyC}, 'Winning head is keyC')
-          t.deepEqual(x.heads[1], {key: keyB}, 'keyB is secondary head')
+          t.deepEqual(x[0], keyC, 'Winning head is keyC')
+          t.deepEqual(x[1], keyB, 'keyB is secondary head')
           return false
         }
         t.fail('stream too long')
@@ -198,12 +198,13 @@ test('meta/stats: forks', (t, db) => {
     db.revisions.stats({live: true}),
     pull.drain( s=> {
       console.log(s)
-      t.equals(s.forks, [0,1,0][i])
-      t.equals(s.incomplete, [0,0,0][i])
+      t.equals(s.revisions, [0,1,2,3][i], 'revisions')
+      t.equals(s.forks, [0,0,1,0][i], 'forks')
+      t.equals(s.incomplete, [0,0,0,0][i], 'incomplete')
       i++
     }, err => {
       t.notOk(err, 'no error')
-      t.equals(i, 3, 'three status updates')
+      t.equals(i, 4, 'four status updates')
       t.end()
     })
   )

@@ -60,7 +60,7 @@ exports.init = function (ssb, config) {
     opts = opts || {}
     return pull(
       s.stream(opts),
-      // the first item is the recuced state
+      // the first item is the reduced state
       // all other items are the output of map
       mapFirst(
         acc => acc[revRoot] && acc[revRoot].revisions.map(toMsg(revRoot))
