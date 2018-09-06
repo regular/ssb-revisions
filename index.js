@@ -2,6 +2,7 @@ const pull = require('pull-stream')
 const paramap = require('pull-paramap')
 const createReduce = require('flumeview-reduce/inject')
 const ssbsort = require('ssb-sort')
+const ltgt = require('ltgt')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -166,6 +167,7 @@ exports.init = function (ssb, config) {
   // stream current heads of all revroots
   s.current = function(opts) {
     opts = opts || {}
+    const filter = ltgt.filter(opts)
     let acc
     return pull(
       s.stream(opts),
@@ -181,6 +183,7 @@ exports.init = function (ssb, config) {
       pull.map(({heads, revisions}) => {
         return heads.map(k => revisions.find(r=>r.key == k).seq )
       }),
+      pull.filter( heads => filter(heads[0]) ),
       pull.through(console.log),
       pull.asyncMap( (heads, cb) => {
         log.get(heads[0], (err, value) => {
