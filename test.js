@@ -315,4 +315,75 @@ test('Revisions dont show up in originals()', (t, db) => {
   })
 })
 
+test('updates() streams latest update only', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+  let a, b, c
+  db.append([
+    a = msg(keyA),
+    b = msg(keyB, keyA, [keyA]),
+    c = msg(keyC, keyA, [keyB]),
+    d = msg(keyD, keyD, [keyD])
+  ], (err, data) => {
+    pull(
+      db.revisions.updates(),
+      pull.collect( (err, result) => {
+        console.log('result', result)
+        t.error(err, 'no error')
+        t.equal(result.length, 1, 'should have one entry')
+        t.deepEqual(result[0].value, c)
+        t.equal(result[0].seq, 389, 'Should have seq')
+        db.close( ()=> t.end())
+      })
+    )
+  })
+})
+
+
+test('updates() streams latest update since opts.gt', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+  let a, b, c
+  db.append([
+    a = msg(keyA),
+    b = msg(keyB, keyA, [keyA]),
+    //c = msg(keyC, keyA, [keyB]),
+    //d = msg(keyD, keyD, [keyD])
+  ], (err, data) => {
+    pull(
+      db.revisions.updates(),
+      pull.collect( (err, result) => {
+        console.log('result', result)
+        t.error(err, 'no error')
+        t.equal(result.length, 1, 'should have one entries')
+        t.deepEqual(result[0].value, b)
+        t.equal(result[0].seq, 123, 'Should have seq')
+
+        db.append([
+          c = msg(keyC, keyA, [keyB]),
+          d = msg(keyD, keyA, [keyC])
+        ], (err, data) => {
+
+          pull(
+            db.revisions.updates({gt: 123}),
+            pull.collect( (err, result) => {
+              console.log('result', result)
+              t.error(err, 'no error')
+              t.equal(result.length, 1, 'should have one entry')
+              t.deepEqual(result[0].value, d)
+              t.equal(result[0].seq, 655, 'Should have seq')
+              t.equal(result[0].old_seq, 123, 'Should have old_seq')
+
+              db.close( ()=> t.end())
+            })
+          )
+        })
+      })
+    )
+  })
+})
 
