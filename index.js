@@ -17,7 +17,7 @@ exports.manifest = {
   current: 'source'
 }
 
-const IDXVER=30
+const IDXVER=31
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
@@ -34,6 +34,7 @@ exports.init = function (ssb, config) {
     initial: initialState,
     map: function(kv) {
       const seq = kv._seq
+      delete kv._seq
       const timestamp = kv.value && kv.value.timestamp
       const c = kv.value && kv.value.content
       if (!isUpdate(kv)) return null

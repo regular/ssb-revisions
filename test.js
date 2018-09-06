@@ -29,16 +29,16 @@ const ts = (function(start){
 })(Date.now())
 
 function msg(key, revisionRoot, revisionBranch) {
-  return {
+  const ret = {
     key,
     value: {
       timestamp: ts(),
-      content: {
-        revisionRoot,
-        revisionBranch 
-      }
+      content: { }
     }
   }
+  if (revisionRoot) ret.value.content.revisionRoot = revisionRoot
+  if (revisionBranch) ret.value.content.revisionBranch = revisionBranch
+  return ret
 }
 
 function fresh(cb) {
@@ -286,4 +286,33 @@ test('meta/stats: incomplete', (t, db) => {
     )
   })
 })
+
+test('Revisions dont show up in originals()', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+  let a, b, c
+  db.append([
+    a = msg(keyA),
+    b = msg(keyB, keyA, [keyA]),
+    c = msg(keyC, keyA, [keyB]),
+    d = msg(keyD, keyD, [keyD])
+  ], (err, data) => {
+    pull(
+      db.revisions.originals(),
+      pull.collect( (err, result) => {
+        console.log('result', result)
+        t.error(err, 'no error')
+        t.equal(result.length, 2, 'should have two entries')
+        t.deepEqual(result[0].value, a)
+        t.deepEqual(result[1].value, d)
+        t.equal(result[0].seq, 0, 'Should have seq')
+        t.equal(result[1].seq, 655, 'Should have seq')
+        db.close( ()=> t.end())
+      })
+    )
+  })
+})
+
 
