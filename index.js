@@ -1,5 +1,7 @@
 const pull = require('pull-stream')
 const paramap = require('pull-paramap')
+const many = require('pull-many')
+const defer = require('pull-defer')
 const createReduce = require('flumeview-reduce/inject')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
@@ -10,29 +12,35 @@ exports.manifest = {
   stats: 'source',
   history: 'source',
   heads: 'source',
+  updates: 'source',
+  originals: 'source',
   current: 'source'
 }
 
-const IDXVER=28
+const IDXVER=30
 
 exports.init = function (ssb, config) {
   const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
   
+  const initialState = {
+    stats: {
+      forks: 0,
+      incomplete: 0,
+      revisions: 0
+    }
+  }
+
   const Reduce = createReduce(Store)(IDXVER, {
-    initial: {
-      stats: {
-        forks: 0,
-        incomplete: 0,
-        revisions: 0
-      }
-    },
+    initial: initialState,
     map: function(kv) {
       const seq = kv._seq
       const timestamp = kv.value && kv.value.timestamp
       const c = kv.value && kv.value.content
+      if (!isUpdate(kv)) return null
+
       const revisionRoot = c && c.revisionRoot
       const revisionBranch = (c && c.revisionBranch) || []
-      if (!revisionRoot || !revisionBranch) return null
+
       return {
         seq,
         key: kv.key,
@@ -51,7 +59,7 @@ exports.init = function (ssb, config) {
       const is_incomplete = incomplete(a.revisions, revisionRoot)
 
       const was_forked = a.heads && a.heads.length > 1
-      a.heads = heads(a.revisions.map(toMsg(revisionRoot)))
+      a.heads = heads(revisionRoot, a.revisions)
 
       if (!was_incomplete && is_incomplete) acc.stats.incomplete++
       else if (was_incomplete && !is_incomplete) acc.stats.incomplete--
@@ -164,38 +172,85 @@ exports.init = function (ssb, config) {
     )
   }
 
-  // stream current heads of all revroots
-  s.current = function(opts) {
+  s.originals = function(opts) {
     opts = opts || {}
-    const filter = ltgt.filter(opts)
+    return pull(
+      log.stream(opts),
+      pull.filter( kvv => {
+        const kv = kvv && kvv.value
+        if (!kv) return true
+        return !isUpdate(kv)
+      })
+    )
+  }
+
+  // stream heads of all revroots that have changed since opts.gt
+  s.updates = function(opts) {
+    opts = opts || {}
+    if (Object.keys(opts).find(x=>x!='gt')) return pull.error(new Error('invalid option'))
+    const since = opts.gt
+
     let acc
     return pull(
-      s.stream(opts),
+      s.stream(),
       mapFirst(
-        _acc => (acc = _acc, Object.keys(acc).filter(k=>k!=='stats').map(k=>acc[k])  ),
+        _acc => (acc = _acc, Object.keys(acc).filter(k=>k!=='stats').map(k=>Object.assign({}, acc[k], {revisionRoot: k})) ),
         v => v ?
           //acc will already contain the new revision,
           //and the heads will also already be calculated!
-          [acc[v.revisionRoot]]
+          [Object.assign({}, acc[v.revisionRoot], {revisionRoot: v.revisionRoot})]
           : []
       ),
       pull.flatten(),
-      pull.map(({heads, revisions}) => {
-        return heads.map(k => revisions.find(r=>r.key == k).seq )
+
+      // calculate head that was current at sequence=since
+      (since ?  pull(
+        pull.through(e => {
+          e.oldHeads = heads(e.revisionRoot, e.revisions, {lte: since})
+        }),
+        pull.through(console.log),
+        pull.filter( ({heads, oldHeads}) => heads[0] !== oldHeads[0] )
+      ) : pull.through() ),
+      // is there a new head compared to last time?
+      pull.map(({heads, oldHeads, revisions}) => {
+        // key => seq
+        return {
+          cur: heads.map(k => revisions.find(r=>r.key == k).seq ),
+          old: oldHeads ? oldHeads.map(k => revisions.find(r=>r.key == k).seq ) : null
+        }
       }),
-      pull.filter( heads => filter(heads[0]) ),
-      pull.through(console.log),
-      pull.asyncMap( (heads, cb) => {
-        log.get(heads[0], (err, value) => {
+      pull.asyncMap( ({cur, old}, cb) => {
+        log.get(cur[0], (err, value) => {
           if (err) return cb(err)
           cb(null, {
             value,
-            seq: heads[0],
-            forked: heads.length > 1
+            seq: cur[0],
+            forked: cur.length > 1,
+            old_seq: old && old[0]
           })
         })
       })
     )
+  }
+
+  s.current = function(opts) {
+    opts = opts || {}
+    const ret = defer.source()
+    pull(s.stream(), pull.take(1), pull.collect( (err, _acc) => {
+      if (err) return ret.resolve(pull.error(err))
+      const acc = _acc[0]
+      ret.resolve(
+        many([
+          s.updates(opts),
+          pull(
+            s.originals(opts),
+            // filter out outdated originals
+            pull.filter( kkv => !acc[kkv.value.key] )
+          )
+        ])
+      ) 
+    }))
+    return ret
   }
 
   s.stats = function(opts) {
@@ -259,7 +314,12 @@ function incomplete(msgs, revRoot) {
   return false
 }
 
-function heads(msgs) {
+function heads(revisionRoot, revisions, opts) {
+  opts = opts || {}
+  const f=ltgt.filter(opts)
+  const msgs = revisions
+    .filter( r => f(r.seq) )
+    .map(toMsg(revisionRoot))
   const hds = ssbsort.heads(msgs)
   const revs = msgs.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
   return hds.map( k => revs[k] ).sort(compare).map( kv => kv.key )
@@ -287,3 +347,12 @@ function toMsg(revisionRoot) {
   }
 }
 
+function isUpdate(kv) {
+  const content = kv.value && kv.value.content
+  if (!content) return false
+  const revRoot = content.revisionRoot
+  const revBranch = content.revisionBranch
+  if (!revRoot || !revBranch) return false
+  if (revRoot == kv.key) return false
+  return true
+}

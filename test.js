@@ -96,6 +96,7 @@ test('Revisions show up in history', (t, db) => {
     pull(
       db.revisions.history(keyA),
       pull.collect( (err, result) => {
+        console.log(result)
         t.notOk(err, 'no error')
         t.equal(result.length, 2, 'history should have two entries')
         t.deepEqual(result[0], b)
