@@ -5,6 +5,7 @@ const defer = require('pull-defer')
 const createReduce = require('flumeview-reduce/inject')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
+const multicb = require('multicb')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -188,7 +189,7 @@ exports.init = function (ssb, config) {
   // stream heads of all revroots that have changed since opts.gt
   s.updates = function(opts) {
     opts = opts || {}
-    if (Object.keys(opts).find(x=>x!='gt')) return pull.error(new Error('invalid option'))
+    if (Object.keys(opts).find(x => x!=='gt' && x!=='old_values')) return pull.error(new Error('invalid option'))
     const since = opts.gt
 
     let acc
@@ -209,10 +210,10 @@ exports.init = function (ssb, config) {
         pull.through(e => {
           e.oldHeads = heads(e.revisionRoot, e.revisions, {lte: since})
         }),
-        pull.through(console.log),
+        //pull.through(console.log),
+        // is there a new head compared to last time?
         pull.filter( ({heads, oldHeads}) => heads[0] !== oldHeads[0] )
       ) : pull.through() ),
-      // is there a new head compared to last time?
       pull.map(({heads, oldHeads, revisions}) => {
         // key => seq
         return {
@@ -221,14 +222,23 @@ exports.init = function (ssb, config) {
         }
       }),
       pull.asyncMap( ({cur, old}, cb) => {
-        log.get(cur[0], (err, value) => {
+        const mcb = multicb({pluck: 1})
+        log.get(cur[0], mcb())
+        if (opts.old_values) {
+          log.get(old[0], mcb())
+        }
+        mcb( (err, result) => {
           if (err) return cb(err)
-          cb(null, {
-            value,
+          const ret = {
+            value: result[0],
             seq: cur[0],
             forked: cur.length > 1,
             old_seq: old && old[0]
-          })
+          }
+          if (result.length>1) {
+            ret.old_value=result[1]
+          }
+          cb(null, ret)
         })
       })
     )

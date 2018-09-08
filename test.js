@@ -206,7 +206,7 @@ test('meta/stats: forks', (t, db) => {
     }, err => {
       t.notOk(err, 'no error')
       t.equals(i, 4, 'four status updates')
-      t.end()
+      db.close( ()=> t.end())
     })
   )
 
@@ -257,7 +257,7 @@ test('meta/stats: incomplete', (t, db) => {
     }, err => {
       t.notOk(err, 'no error')
       t.equals(i, 3, 'three status updates')
-      t.end()
+      db.close( ()=> t.end())
     })
   )
 
@@ -369,7 +369,7 @@ test('updates() streams latest update since opts.gt', (t, db) => {
         ], (err, data) => {
 
           pull(
-            db.revisions.updates({gt: 123}),
+            db.revisions.updates({gt: 123, old_values: true}),
             pull.collect( (err, result) => {
               console.log('result', result)
               t.error(err, 'no error')
@@ -377,6 +377,7 @@ test('updates() streams latest update since opts.gt', (t, db) => {
               t.deepEqual(result[0].value, d)
               t.equal(result[0].seq, 655, 'Should have seq')
               t.equal(result[0].old_seq, 123, 'Should have old_seq')
+              t.deepEqual(result[0].old_value, b)
 
               db.close( ()=> t.end())
             })
@@ -387,3 +388,47 @@ test('updates() streams latest update since opts.gt', (t, db) => {
   })
 })
 
+test('current() streams latest update and originals', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+  let a, b, c, d
+  db.append([
+    a = msg(keyA),
+    b = msg(keyB),
+    c = msg(keyC, keyB, [keyB]),
+    d = msg(keyD, keyB, [keyC])
+  ], (err, data) => {
+    pull(
+      db.revisions.current(),
+      pull.collect( (err, result) => {
+        console.log('result', result)
+        t.error(err, 'no error')
+        t.equal(result.length, 2, 'should have two entries')
+
+        t.deepEqual(result.find(kvv => kvv.value.key == keyA), {value: a, seq: 0})
+        t.deepEqual(result.find(kvv => kvv.value.key == keyD), {
+          value: d,
+          seq: 512,
+          forked: false,
+          old_seq: null 
+        })
+        pull(
+          db.revisions.current({gt:246}),
+          pull.collect( (err, result) => {
+            console.log('result', result)
+            t.equal(result.length, 1, 'should have one entry ')
+            t.deepEqual(result[0], {
+              value: d,
+              seq: 512,
+              forked: false,
+              old_seq: 246
+            })
+            db.close( ()=> t.end())
+          })
+        )
+      })
+    )
+  })
+})
