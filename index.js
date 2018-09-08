@@ -224,7 +224,7 @@ exports.init = function (ssb, config) {
       pull.asyncMap( ({cur, old}, cb) => {
         const mcb = multicb({pluck: 1})
         log.get(cur[0], mcb())
-        if (opts.old_values) {
+        if (opts.old_values && old && old[0]) {
           log.get(old[0], mcb())
         }
         mcb( (err, result) => {
