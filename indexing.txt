@@ -1,0 +1,28 @@
+Goal: feed a stream of (latest) revisions into flumeViews ( flumeview-level in particular)
+to answer queries like "give me a stream of the latest revisions of messages of type 'whatever'"
+
+We want to reuse code from secure-scuttlebutt/indexes/
+
+A flumeview exports a function that creates a sink that will update the index.
+
+TODO
+
+- [x] heads() accepts opts.lte, this allows us to calculate the head
+that was present the last time a dependant index was updated
+- [x] We can than use this previous head to get the previous value, which will allow
+the index to remove entries that are not longer valid (think: moving an object from one
+branch to another)
+
+- [x] opt.lte in heads()
+- [x] opt.gt opt.old_value in updates() (and therefore current() )
+- [x] tests for originals, updates, current
+
+
+
+- [x] create a stream containing
+  - [x] all messages in the log with no revisionRoot or revisionRoot == key ("original" messages)
+  - [x] latest known messages for all revisionRoots ("updates"/"revisions")
+  - [x] starting from a given seq
+  - [x] emit 'since' events for skipped messages, so the index knows if it is uptodate
+
+- [x] add a `use` function that allows for registering a view
