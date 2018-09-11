@@ -21,6 +21,7 @@ module.exports = function(log, ready, createStream) {
     sv.since.once(function build (upto) {
       log.since.once(function (since) {
         if(upto > since) {
+          console.log('destroying', name)
           sv.destroy(function () { build(-1) })
         } else {
           var opts = {
@@ -32,6 +33,8 @@ module.exports = function(log, ready, createStream) {
           }
           
           if (upto == -1) opts.cache = false
+
+          console.log('Indexing opts are:', JSON.stringify(opts))
 
           pull(
             createStream(opts),

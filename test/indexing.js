@@ -120,6 +120,41 @@ test('updates({live:true})', (t, db) => {
   done( ()=> db.close( ()=> t.end()) )
 })
 
+test('current({live:true}): minimal', (t, db) => {
+  const keyA = rndKey()
+  const keyA1 = rndKey()
+  let a, b, n=0
+
+  const done = multicb()
+
+  pull(
+    db.revisions.current({live: true}),
+    pull.drain( result => {
+      n++
+      console.log('current', n, result)
+      if (n==1) {
+        //t.equal(result.value.key, keyA)
+        //t.deepEqual(result.value, a)
+        t.equal(result.since, 0)
+      } else if (n==2) {
+        //t.notOk(result.value, 'should have no vslue')
+        t.equal(typeof result.since, 'number', 'since is a number')
+        return false
+      }
+    }, done())
+  )
+
+  db.append([
+    a = msg(keyA),
+    b = msg(keyA1, keyA, [keyA])
+  ], done())
+
+  done( err => {
+    console.log('we are all done', err)
+    db.close( ()=> t.end()) 
+  })
+})
+
 test('current({live:true}): shadowed revision', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()

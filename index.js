@@ -294,7 +294,8 @@ exports.init = function (ssb, config) {
     return ret
   }
 
-  //s.use = require('./indexing')(log, ssb.ready, s.current)
+  // TODO: return revisions onstead of wrapped view
+  s.use = require('./indexing')(log, ssb.ready, s.current)
 
   s.stats = function(opts) {
     opts = opts || {}
