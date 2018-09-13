@@ -25,13 +25,12 @@ module.exports = function(log, ready, createStream) {
           sv.destroy(function () { build(-1) })
         } else {
           var opts = {
-            gt: upto,
             live: true,
             seqs: true,
             values: true,
             old_values: true
           }
-          
+          if (upto !== -1) opts.gt = upto
           if (upto == -1) opts.cache = false
 
           console.log('Indexing opts are:', JSON.stringify(opts))
@@ -41,8 +40,10 @@ module.exports = function(log, ready, createStream) {
             Looper,
             sv.createSink(function (err) {
               //if(!flume.closed) {
-                if(err)
+                if(err) {
+                  console.error(err)
                   console.error(explain(err, 'view stream error'))
+                }
                 sv.since.once(build)
               //}
             })

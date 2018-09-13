@@ -19,6 +19,7 @@
     "pull-looper": "^1.0.0",
     "pull-many": "^1.0.8",
     "pull-merge": "^1.0.4",
+    "pull-next": "^1.0.1",
     "pull-paramap": "^1.2.2",
     "ssb-sort": "^1.1.0"
   },

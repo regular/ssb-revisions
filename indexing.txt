@@ -1,3 +1,19 @@
+New approach
+------------
+
+- updates() includes originals when {live:true, old: false}
+- map passes through msg, wehen no revisionRoot
+- those are dropped in reduce
+
+current() concatenates two streams using pull-next
+
+1. merge(originals({live: false, gt: }), updates({live: false, gt:})
+2. updates({live: true, old: false})
+
+- [ ] we need a way to retrieve the seq of the original message to compare it against `since`
+
+---
+
 Goal: feed a stream of (latest) revisions into flumeViews ( flumeview-level in particular)
 to answer queries like "give me a stream of the latest revisions of messages of type 'whatever'"
 

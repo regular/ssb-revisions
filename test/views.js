@@ -34,8 +34,11 @@ test('use() registers a view', (t, db) => {
             if (kvv.value && kvv.value.value && kvv.value.value.content) {
               myValue = kvv.value.value.content.foo
             }
-            if (kvv.since) since.set(kvv.since)
-          }, (err)=>{
+            if (kvv.since && kvv.since > since.value) {
+              console.log('new since value:', kvv.since)
+              since.set(kvv.since)
+            }
+          }, err => {
             console.log(err)
             cb(err)
           })

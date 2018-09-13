@@ -2,6 +2,7 @@ const pull = require('pull-stream')
 const paramap = require('pull-paramap')
 const merge = require('pull-merge')
 const defer = require('pull-defer')
+const next = require('pull-next')
 const createReduce = require('flumeview-reduce/inject')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
@@ -21,7 +22,10 @@ exports.manifest = {
 const IDXVER=32
 
 exports.init = function (ssb, config) {
-  const Store = config.revisions && config.revisions.Store || require('flumeview-reduce/store/fs') // for testing
+  // for testing
+  const Store = config.revisions &&
+    config.revisions.Store ||
+    require('flumeview-reduce/store/fs')
   
   const initialState = {
     stats: {
@@ -33,13 +37,13 @@ exports.init = function (ssb, config) {
 
   const Reduce = createReduce(Store)(IDXVER, {
     initial: initialState,
-    map: function(kv) {
-      const seq = kv._seq
-      delete kv._seq
+    map: function(kv, seq) {
+      console.log('MAP', kv, seq)
+      // pass through originals
+      if (!isUpdate(kv)) return {value: kv, seq}
+
       const timestamp = kv.value && kv.value.timestamp
       const c = kv.value && kv.value.content
-      if (!isUpdate(kv)) return null
-
       const revisionRoot = c && c.revisionRoot
       const revisionBranch = (c && c.revisionBranch) || []
 
@@ -51,7 +55,9 @@ exports.init = function (ssb, config) {
         revisionBranch: ary(revisionBranch)
       }
     },
+
     reduce: function (acc, {key, revisionRoot, revisionBranch, timestamp}, seq) {
+      if (!revisionRoot) return acc // ignore originals
       acc.stats.revisions++
       
       let a
@@ -73,20 +79,12 @@ exports.init = function (ssb, config) {
       return acc
     }
   })
-  let log
+
+  let log, myView
   const s = ssb._flumeUse('revisions', (_log, name) => {
     log = _log
-
     const ret = Reduce(log, name)
-    const _createSink = ret.createSink
-    ret.createSink = function() {
-      return pull(
-        pull.through(x=>{
-          x.value._seq = x.seq // expose seq to map function
-        }),
-        _createSink()
-      )
-    }
+    myView = ret
     return ret
   })
 
@@ -174,8 +172,8 @@ exports.init = function (ssb, config) {
   }
 
   s.originals = function(opts) {
-    console.log('ORIGINALS')
     opts = opts || {}
+    console.log('ORIGINALS', opts)
     return pull(
       log.stream(opts),
       pull.through( kvv => {
@@ -190,11 +188,14 @@ exports.init = function (ssb, config) {
   }
 
   // stream heads of all revroots that have changed since opts.gt
+  // in live mode, also include originals
   s.updates = function(opts) {
     opts = opts || {}
+    console.log('UPDATES', opts)
     //if (Object.keys(opts).find(x => x!=='gt' && x!=='old_values')) return pull.error(new Error('invalid option'))
-    const since = opts.gt
-    const live = opts.live
+    const since = opts.gt > -1 ? opts.gt : undefined
+    const live = opts.live || false
+    const old = typeof opts.old == 'undefined' ? !live : opts.old 
 
     let acc
     return pull(
@@ -202,37 +203,80 @@ exports.init = function (ssb, config) {
       mapFirst(
         _acc => {
           acc = _acc
-          return Object.keys(acc)
+          if (!old) return []
+          const l = Object.keys(acc)
             .filter(k => k !== 'stats')
             .map( k=> Object.assign({}, acc[k], {revisionRoot: k}))
             .sort( (a, b) => a.since - b.since )
+          console.log('myView.since', myView.since.value)
+          l.push({since: myView.since.value})
+          console.log('from acc:', l)
+          return l
         },
-        v => v ?
-          //acc will already contain the new revision,
-          //and the heads will also already be calculated!
-          [Object.assign({}, acc[v.revisionRoot], {revisionRoot: v.revisionRoot})]
-          : []
+        v => {
+          if (v.revisionRoot) {
+            //acc will already contain the new revision,
+            //and the heads will also already be calculated!
+            if (acc[v.revisionRoot].heads[0] == v.key) {
+              return [Object.assign(
+                  {}, acc[v.revisionRoot],
+                  {revisionRoot: v.revisionRoot}
+              )]
+            }
+            return [{since: v.seq}]
+          }
+          if (acc[v.value.key]) {
+            return [{since: v.seq}]
+          }
+          return [Object.assign({since: v.seq}, v)]
+        }
       ),
       pull.flatten(),
 
       // calculate head that was current at sequence=since
-      (since ?  pull(
-        pull.through(e => {
+      (since !== undefined ?  pull(
+        pull.asyncMap( (e, cb) => {
+          if (!e.revisionRoot) return cb(null, e)
           e.oldHeads = heads(e.revisionRoot, e.revisions, {lte: since})
-        }),
+          if (e.oldHeads.length) {
+            // is there a new head compared to last time?
+            if (e.heads[0] == e.oldHeads[0]) return cb(null, null)
+            return cb(null, e)
+          }
+          console.log('NO OLD HEAD')
+          // none of the former heads existed back then
+          // But did the original message exist?
+          ssb.keys.get(e.revisionRoot, (err, seq) => {
+            if (err) return cb(err)
+            console.log('ORIGINAL SEQ from ssb.keys:', seq)
+            if (seq <= since) {
+              e.old_seq = seq
+            }
+            cb(null, e)
+          })
+        })
         //pull.through(console.log),
-        // is there a new head compared to last time?
-        pull.filter( ({heads, oldHeads}) => heads[0] !== oldHeads[0] )
       ) : pull.through() ),
-      pull.map(({heads, oldHeads, revisions, since}) => {
-        // key => seq
-        return {
-          cur: heads.map(k => revisions.find(r=>r.key == k).seq ),
-          old: oldHeads ? oldHeads.map(k => revisions.find(r=>r.key == k).seq ) : null,
-          since
+      pull.filter(),
+      pull.map( kv => {
+        if (kv.heads) {
+          const {heads, oldHeads, revisions, since, old_seq} = kv
+          // key => seq
+          return {
+            cur: heads && heads.map(k => revisions.find(r=>r.key == k).seq ),
+            old: old_seq !== undefined ? [old_seq] : (
+              oldHeads ? oldHeads
+              .map(k => revisions
+              .find(r=>r.key == k).seq ) : null
+            ),
+            since
+          }
         }
+        return kv
       }),
-      pull.asyncMap( ({cur, old, since}, cb) => {
+      pull.asyncMap( (kv, cb) => {
+        const {cur, old, since} = kv
+        if (!cur) return cb(null, kv)
         const mcb = multicb({pluck: 1})
         log.get(cur[0], mcb())
         if (opts.old_values && old && old[0]) {
@@ -259,37 +303,44 @@ exports.init = function (ssb, config) {
   s.current = function(opts) {
     console.log('CURRENT')
     opts = opts || {}
+    const {live, gt} = opts
+
     const ret = defer.source()
     pull(s.stream(), pull.take(1), pull.collect( (err, _acc) => {
       if (err) return ret.resolve(pull.error(err))
       const acc = _acc[0]
-      ret.resolve(
-        merge(
-          pull(
-            s.originals(opts),
-            // filter out outdated originals
-            pull.map( kvv => {
-              if (kvv.value && !acc[kvv.value.key]) return kvv
-              return {
-                since: kvv.since
-              }
-            }),
-            pull.through(x => {
-              console.log('merge orig', x)
-            })
-          ), 
-          pull(
-            s.updates(opts),
-            pull.through(x => {
-              console.log('merge update', x)
-            })
-          ),
-          (a, b) => {
-            console.log('compare', a, b, '/compare')
-            return a.since - b.since
-          }
-        )
-      ) 
+      let i = 0 
+      ret.resolve(next( () => {
+        if(i++ == 0) {
+          return merge(
+            pull(
+              s.originals(gt !== undefined ? {gt}: {}),  // finite stream from the log
+              // filter out outdated originals
+              pull.map( kvv => {
+                if (kvv.value && !acc[kvv.value.key]) return kvv
+                return {
+                  since: kvv.since
+                }
+              }),
+              pull.through(x => {
+                console.log('merge orig', x)
+              })
+            ), 
+            pull(
+              s.updates(gt !== undefined ? {gt} : {}),  // stream from acc
+              pull.through(x => {
+                console.log('merge update', x)
+              })
+            ),
+            (a, b) => {
+              console.log('compare', a, b, '/compare')
+              return a.since - b.since
+            }
+          ) 
+        }
+        // stream live data
+        return live && s.updates(Object.assign({live: true, old: false}, gt !== undefined ? {gt} : {}))
+      }))
     }))
     return ret
   }
