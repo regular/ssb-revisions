@@ -1,6 +1,8 @@
 # ssb-revisions
 mutable documents for secure scuttlebutt
 
+EXPERIMENTAL, Work in Progress
+
 ## Installation
 
 Make sure sbot is running, do
@@ -15,8 +17,6 @@ and restart sbot.
 ### `revisions.stats({live})`
 
 get statistics
-
-- format is
 
 ```
 {
@@ -44,14 +44,11 @@ get the history of a document/an object and optionally get live updates whenever
 
 stream current heads of an object, most current head first.
 
-- format is
-
 ```
 {
   meta: {
- TODO:   heads: n,
+    heads: n,
     incomplete: bool,
- TODO:   change_requests: n,
   },
   heads: [{
     key: 
@@ -66,11 +63,11 @@ stream current heads of an object, most current head first.
   - live: stream live changes
   - meta: include meta data (see below)
   - values: include values (default is false)
-  - keys: include keys (default is true) 
+  - keys: include keys (default is true)
 
-> **NOTE** if there's just one key in an object, the object collapses that key's value.
+> **NOTE** if there's just one key in the response object, the object collapses to that key's value.
 
-Example:
+Examples:
 
 ```
 $ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" --meta
@@ -92,13 +89,3 @@ $ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256"
 ]
 
 ```
-
-### TODO
-
-### `revisions.edit(revRoot-or-revBrabh)`
-
-TODO: edit a message in your favourite $EDITOR
-
-### `revisions.update(revRoot-or-revBrabh)`
-
-TODO: update message content from stdin
