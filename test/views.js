@@ -33,18 +33,21 @@ test('use() registers a view', (t, db) => {
             console.log('Indexing foo:', JSON.stringify(kvv, null, 2))
             if (kvv.value && kvv.value.value && kvv.value.value.content) {
               myValue = kvv.value.value.content.foo
+              console.log('new value', myValue)
             }
             if (kvv.since && kvv.since > since.value) {
               console.log('new since value:', kvv.since)
               since.set(kvv.since)
             }
+            return undefined
           }, err => {
-            console.log(err)
+            console.log('sink ends:', err)
             cb(err)
           })
         )
       },
       foo: cb => {
+        console.log('CALLING foo')
         cb(null, myValue)  
       }
     }
@@ -59,8 +62,15 @@ test('use() registers a view', (t, db) => {
     fooMsg(keyA, null, [], 'bar1'),
     fooMsg(keyA1, keyA, [keyA], 'bar2')
   ], (err, seq) => {
+    /*
+    setTimeout( ()=> {
+      console.log('timeout')
+    }, 6000)
+    */
+    t.error(err)
     console.log('Waiting for', seq)
     sv.foo( (err, data) => {
+      t.error(err)
       t.equal(sv.since.value, seq, 'Should have waited until view is uo-to-date')
       t.equal(data, 'bar2', 'view should have correct value')
       t.end()

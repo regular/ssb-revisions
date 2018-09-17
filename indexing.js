@@ -41,9 +41,10 @@ module.exports = function(log, ready, createStream) {
             sv.createSink(function (err) {
               //if(!flume.closed) {
                 if(err) {
-                  console.error(err)
-                  console.error(explain(err, 'view stream error'))
+                  console.error('error from sink:', err)
+                  if (err !== true) console.error(explain(err, 'view stream error'))
                 }
+                // commented out, so that tests end
                 sv.since.once(build)
               //}
             })

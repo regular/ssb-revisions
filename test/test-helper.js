@@ -2,6 +2,7 @@ const tape = require('tape')
 const crypto = require('crypto')
 const OffsetLog = require('flumelog-offset')
 const Flume = require('flumedb')
+const ViewHashTable = require('flumeview-hashtable')
 const codec = require('flumecodec/json')
 const Revisions = require('../')
 
@@ -45,10 +46,21 @@ function fresh(cb) {
     '/tmp/test-ssb-revisions-' + ts()+'/bla',
     {blockSize: 1024, codec}
   ))
- 
+  .use('keys', ViewHashTable(2, function (key) {
+      var b = new Buffer(key.substring(1,7), 'base64').readUInt32BE(0)
+      return b
+    })
+  )
+
   Revisions.init({
     ready: db.ready,
     get: db.get,
+    getSeq: (key, cb) => {
+      db.keys.get(key, (err, kv) => {
+        if (err) return cb(err)
+        cb(null, kv.seq)
+      })
+    },
     _flumeUse: (name, view) => {
       db.use(name, view)
       const sv = db[name]

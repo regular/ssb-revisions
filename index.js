@@ -38,7 +38,7 @@ exports.init = function (ssb, config) {
   const Reduce = createReduce(Store)(IDXVER, {
     initial: initialState,
     map: function(kv, seq) {
-      console.log('MAP', kv, seq)
+      //console.log('MAP', kv, seq)
       // pass through originals
       if (!isUpdate(kv)) return {value: kv, seq}
 
@@ -173,7 +173,7 @@ exports.init = function (ssb, config) {
 
   s.originals = function(opts) {
     opts = opts || {}
-    console.log('ORIGINALS', opts)
+    //console.log('ORIGINALS', opts)
     return pull(
       log.stream(opts),
       pull.through( kvv => {
@@ -195,7 +195,7 @@ exports.init = function (ssb, config) {
     //if (Object.keys(opts).find(x => x!=='gt' && x!=='old_values')) return pull.error(new Error('invalid option'))
     const since = opts.gt > -1 ? opts.gt : undefined
     const live = opts.live || false
-    const old = typeof opts.old == 'undefined' ? !live : opts.old 
+    const old = opts.old == undefined ? true : opts.old 
 
     let acc
     return pull(
@@ -203,17 +203,20 @@ exports.init = function (ssb, config) {
       mapFirst(
         _acc => {
           acc = _acc
-          if (!old) return []
+          if (!old) {
+            //console.log('NOT OLD')
+            return []
+          }
           const l = Object.keys(acc)
             .filter(k => k !== 'stats')
             .map( k=> Object.assign({}, acc[k], {revisionRoot: k}))
             .sort( (a, b) => a.since - b.since )
-          console.log('myView.since', myView.since.value)
           l.push({since: myView.since.value})
-          console.log('from acc:', l)
+          //console.log('from acc:', l)
           return l
         },
         v => {
+          //console.log('V', v)
           if (v.revisionRoot) {
             //acc will already contain the new revision,
             //and the heads will also already be calculated!
@@ -243,12 +246,11 @@ exports.init = function (ssb, config) {
             if (e.heads[0] == e.oldHeads[0]) return cb(null, null)
             return cb(null, e)
           }
-          console.log('NO OLD HEAD')
           // none of the former heads existed back then
           // But did the original message exist?
-          ssb.keys.get(e.revisionRoot, (err, seq) => {
+          ssb.getSeq(e.revisionRoot, (err, seq) => {
             if (err) return cb(err)
-            console.log('ORIGINAL SEQ from ssb.keys:', seq)
+            console.log('ORIGINAL SEQ from getSeq:', seq)
             if (seq <= since) {
               e.old_seq = seq
             }
@@ -279,7 +281,7 @@ exports.init = function (ssb, config) {
         if (!cur) return cb(null, kv)
         const mcb = multicb({pluck: 1})
         log.get(cur[0], mcb())
-        if (opts.old_values && old && old[0]) {
+        if (opts.old_values && old && old[0] !== undefined) {
           log.get(old[0], mcb())
         }
         mcb( (err, result) => {
@@ -301,45 +303,78 @@ exports.init = function (ssb, config) {
   }
 
   s.current = function(opts) {
-    console.log('CURRENT')
+    //console.log('CURRENT')
     opts = opts || {}
-    const {live, gt} = opts
+    const {live, gt, old_values} = opts
 
     const ret = defer.source()
     pull(s.stream(), pull.take(1), pull.collect( (err, _acc) => {
       if (err) return ret.resolve(pull.error(err))
       const acc = _acc[0]
       let i = 0 
+      let repeat = false
+      let old_since = null
       ret.resolve(next( () => {
-        if(i++ == 0) {
-          return merge(
-            pull(
-              s.originals(gt !== undefined ? {gt}: {}),  // finite stream from the log
-              // filter out outdated originals
-              pull.map( kvv => {
-                if (kvv.value && !acc[kvv.value.key]) return kvv
-                return {
-                  since: kvv.since
-                }
-              }),
-              pull.through(x => {
-                console.log('merge orig', x)
-              })
+        console.log('next', i, 'repeat', repeat)
+        i++
+        if(i == 1 || repeat) {
+          repeat = false
+          return pull(
+            merge(
+              pull(
+                s.originals({gt: old_since || gt}),  // finite stream from the log
+                // filter out outdated originals
+                pull.map( kvv => {
+                  if (kvv.value && !acc[kvv.value.key]) return kvv
+                  return {
+                    since: kvv.since
+                  }
+                })
+              ), 
+              pull(
+                s.updates({gt: old_since || gt, old_values}),  // stream from acc
+                pull.through(x => {
+                  //console.log('merge update', x)
+                })
+              ),
+              (a, b) => {
+                //console.log('compare', a, b, '/compare')
+                return a.since - b.since
+              }
             ), 
-            pull(
-              s.updates(gt !== undefined ? {gt} : {}),  // stream from acc
-              pull.through(x => {
-                console.log('merge update', x)
+
+            ( ()=>{
+              let count = 0
+              return pull.through(x => {
+                //console.log('merge orig', x)
+                if (x.since) {
+                  if (x.since !== old_since) {
+                    console.log('REPEAT true 1')
+                    repeat = true
+                  }
+                  old_since = x.since
+                }
+                
+                count++
+                if (count>1) {
+                  console.log('REPEAT true 2')
+                  repeat = true
+                }
               })
-            ),
-            (a, b) => {
-              console.log('compare', a, b, '/compare')
-              return a.since - b.since
-            }
-          ) 
+            })()
+
+          )
         }
         // stream live data
-        return live && s.updates(Object.assign({live: true, old: false}, gt !== undefined ? {gt} : {}))
+        console.log('NOW STREAMING LIVE', i)
+        if (live) {
+          return s.updates({
+            live: true,
+            old: false,
+            gt
+          })
+        }
+        
       }))
     }))
     return ret
