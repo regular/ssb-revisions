@@ -305,7 +305,9 @@ exports.init = function (ssb, config) {
   s.current = function(opts) {
     //console.log('CURRENT')
     opts = opts || {}
-    const {live, gt, old_values} = opts
+    const {live, old_values} = opts
+    let {gt} = opts
+    if (gt == undefined) gt = -1
 
     const ret = defer.source()
     pull(s.stream(), pull.take(1), pull.collect( (err, _acc) => {
@@ -314,68 +316,73 @@ exports.init = function (ssb, config) {
       let i = 0 
       let repeat = false
       let old_since = null
-      ret.resolve(next( () => {
-        console.log('next', i, 'repeat', repeat)
-        i++
-        if(i == 1 || repeat) {
-          repeat = false
-          return pull(
-            merge(
-              pull(
-                s.originals({gt: old_since || gt}),  // finite stream from the log
-                // filter out outdated originals
-                pull.map( kvv => {
-                  if (kvv.value && !acc[kvv.value.key]) return kvv
-                  return {
-                    since: kvv.since
+      ret.resolve(
+        pull(
+          next( () => {
+            console.log('next', i, 'repeat', repeat)
+            i++
+            if(i == 1 || repeat) {
+              repeat = false
+              return pull(
+                merge(
+                  pull(
+                    s.originals({gt: old_since || gt}),  // finite stream from the log
+                    // filter out outdated originals
+                    pull.map( kvv => {
+                      if (kvv.value && !acc[kvv.value.key]) return kvv
+                      return {
+                        since: kvv.since
+                      }
+                    })
+                  ), 
+                  pull(
+                    s.updates({gt: old_since || gt, old_values}),  // stream from acc
+                    pull.through(x => {
+                      //console.log('merge update', x)
+                    })
+                  ),
+                  (a, b) => {
+                    //console.log('compare', a, b, '/compare')
+                    return a.since - b.since
                   }
-                })
-              ), 
-              pull(
-                s.updates({gt: old_since || gt, old_values}),  // stream from acc
-                pull.through(x => {
-                  //console.log('merge update', x)
-                })
-              ),
-              (a, b) => {
-                //console.log('compare', a, b, '/compare')
-                return a.since - b.since
-              }
-            ), 
+                ), 
 
-            ( ()=>{
-              let count = 0
-              return pull.through(x => {
-                //console.log('merge orig', x)
-                if (x.since) {
-                  if (x.since !== old_since) {
-                    console.log('REPEAT true 1')
-                    repeat = true
-                  }
-                  old_since = x.since
-                }
-                
-                count++
-                if (count>1) {
-                  console.log('REPEAT true 2')
-                  repeat = true
-                }
+                ( ()=>{
+                  let count = 0
+                  return pull.through(x => {
+                    //console.log('merge orig', x)
+                    if (x.since) {
+                      if (x.since !== old_since) {
+                        console.log('REPEAT true 1')
+                        repeat = true
+                      }
+                      old_since = x.since
+                    }
+                    count++
+                    /*
+                    if (count>1) {
+                      console.log('REPEAT true 2')
+                      repeat = true
+                    }
+                    */
+                  })
+                })()
+              )
+            }
+            // stream live data
+            console.log('NOW STREAMING LIVE', i)
+            if (live) {
+              return s.updates({
+                live: true,
+                old: false,
+                gt
               })
-            })()
-
-          )
-        }
-        // stream live data
-        console.log('NOW STREAMING LIVE', i)
-        if (live) {
-          return s.updates({
-            live: true,
-            old: false,
-            gt
-          })
-        }
-        
-      }))
+            }
+          }
+        )
+        //, pull.filter( x => x.since > gt )
+      )
+    )
     }))
     return ret
   }
