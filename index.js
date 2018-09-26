@@ -131,7 +131,7 @@ exports.init = function (ssb, config) {
         // what revRoots where changed?
         pull(
           sv.read({
-            gt: ['SR', oldSeq, null],
+            gt: ['SR', oldSeq, undefined],
             lte: ['SR', sv.since.value, undefined],
             values: false,
             keys: true,
@@ -186,7 +186,7 @@ function getValueAt(sv, revRoot, at, cb) {
   pull(
     sv.heads(revRoot, {
       lte: at,
-      keys: false,
+      keys: true,
       values: true,
       maxHeads: 1
     }),

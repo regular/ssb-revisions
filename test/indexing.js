@@ -2,6 +2,8 @@
   const multicb = require('multicb')
   const {test, msg, rndKey} = require('./test-helper')
 
+/*
+
   test('updates should be sorted by since', (t, db) => {
     const keyA = rndKey()
     const keyA1 = rndKey()
@@ -332,4 +334,4 @@ test('current({live: true, old_values: true})', (t, db) => {
     )
   })
 })
-
+*/

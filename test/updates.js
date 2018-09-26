@@ -31,7 +31,7 @@ test('updates (single)', (t, db) => {
           t.equal(items.length, 2)
           t.deepEquals(items[0], {
             key: keyA,
-            value: a.value,
+            value: a,
             old_value: null
           })
           t.deepEquals(items[1], {
@@ -62,7 +62,7 @@ test('updates {since: 0}', (t, db) => {
           t.equal(items.length, 2)
           t.deepEquals(items[0], {
             key: keyB,
-            value: b.value,
+            value: b,
             old_value: null
           })
           t.deepEquals(items[1], {

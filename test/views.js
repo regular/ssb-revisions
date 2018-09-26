@@ -3,6 +3,7 @@ const multicb = require('multicb')
 const {test, msg, rndKey} = require('./test-helper')
 const Obv = require('obv')
 
+/*
 function fooMsg(key, revRoot, revBranch, foo) {
   const ret = msg(key, revRoot, revBranch)
   ret.value.content.foo = foo
@@ -62,11 +63,6 @@ test('use() registers a view', (t, db) => {
     fooMsg(keyA, null, [], 'bar1'),
     fooMsg(keyA1, keyA, [keyA], 'bar2')
   ], (err, seq) => {
-    /*
-    setTimeout( ()=> {
-      console.log('timeout')
-    }, 6000)
-    */
     t.error(err)
     console.log('Waiting for', seq)
     sv.foo( (err, data) => {
@@ -77,4 +73,4 @@ test('use() registers a view', (t, db) => {
     })
   })
 })
-
+*/
