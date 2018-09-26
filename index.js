@@ -1,12 +1,13 @@
 const pull = require('pull-stream')
 const defer = require('pull-defer')
 const next = require('pull-next')
-const createView = require('flumeview-level')
+const CreateView = require('flumeview-level')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
 const multicb = require('multicb')
 
 const getRange = require('./get_range')
+const Indexing = require('./indexing')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -19,15 +20,20 @@ exports.manifest = {
 const IDXVER=4
 
 exports.init = function (ssb, config) {
-  
-  const view = createView(IDXVER, (kv, seq) => {
+  let _log
+
+  const createView = CreateView(IDXVER, (kv, seq) => {
     const c = kv.value && kv.value.content
     const revisionRoot = c && c.revisionRoot || kv.key
     console.log('MAP', seq, revisionRoot)
     return [['RS', revisionRoot, seq], ['SR', seq, revisionRoot]]
   })
 
-  const sv = ssb._flumeUse('revisions', view)
+  const sv = ssb._flumeUse('revisions', (log, name) => {
+    _log = log
+    return createView(log, name)
+  })
+
 
   sv.history = function(revRoot, opts) {
     opts = opts || {}
@@ -141,7 +147,6 @@ exports.init = function (ssb, config) {
             seqs: false
           }),
           pull.through( ([_, seq, __]) => {
-            console.log('seq', seq)
             newSeq = Math.max(newSeq, seq)
           }),
           pull.map(([_, __, revRoot]) => revRoot),
@@ -176,8 +181,12 @@ exports.init = function (ssb, config) {
     } })
   }
     
-  // TODO: return revisions instead of wrapped view
-  //s.use = require('./indexing')(log, ssb.ready, s.current)
+  const addView = Indexing(_log, ssb.ready, sv.updates)
+  sv.use = function(name, createView) {
+    sv[name] = addView(name, createView)
+    return sv
+  }
+
   //s.use('byBranch', require('./indexes/branch') )
 
   return sv
@@ -196,7 +205,6 @@ function getValueAt(sv, revRoot, at, cb) {
       maxHeads: 1
     }),
     pull.collect((err, items) => {
-      console.log('getValueAt', items)
       if (err) return cb(err)
       if (!items.length) return cb(null, null)
       cb(null, {
@@ -235,7 +243,6 @@ function ary(x) {
 }
 
 function incomplete(msgs, revRoot) {
-  console.log(msgs)
   const revs = msgs.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
   for(let m of msgs) {
     for(let b of ary(m.value.content.revisionBranch)) {

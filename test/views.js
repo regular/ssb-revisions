@@ -3,18 +3,15 @@ const multicb = require('multicb')
 const {test, msg, rndKey} = require('./test-helper')
 const Obv = require('obv')
 
-/*
 function fooMsg(key, revRoot, revBranch, foo) {
   const ret = msg(key, revRoot, revBranch)
   ret.value.content.foo = foo
-  console.log(ret)
   return ret
 }
 
 test('use() registers a view', (t, db) => {
   
   function createView(log, name) {
-    console.log('creating view')
     const since = Obv()
     let myValue
     since.set(-1)
@@ -24,7 +21,6 @@ test('use() registers a view', (t, db) => {
         'foo': 'async'
       },
       createSink: cb => {
-        console.log('creating sink')
         return pull(
           pull.asyncMap( (x, cb) => {
             console.log('Got foo:', JSON.stringify(x, null, 2))
@@ -54,8 +50,10 @@ test('use() registers a view', (t, db) => {
     }
   }
 
-  const sv = db.revisions.use('a_view', createView)
-  
+  db.revisions.use('bar', createView)
+  t.ok(db.revisions.bar, 'db.revisions has property bar')
+  t.equal(typeof db.revisions.bar.foo, 'function', 'foo is a function')
+
   const keyA = rndKey()
   const keyA1 = rndKey()
 
@@ -65,12 +63,11 @@ test('use() registers a view', (t, db) => {
   ], (err, seq) => {
     t.error(err)
     console.log('Waiting for', seq)
-    sv.foo( (err, data) => {
+    db.revisions.bar.foo( (err, data) => {
       t.error(err)
-      t.equal(sv.since.value, seq, 'Should have waited until view is uo-to-date')
+      t.equal(db.revisions.bar.since.value, seq, 'Should have waited until view is uo-to-date')
       t.equal(data, 'bar2', 'view should have correct value')
-      t.end()
+      db.close( ()=> t.end() )
     })
   })
 })
-*/
