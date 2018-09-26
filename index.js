@@ -1,8 +1,5 @@
 const pull = require('pull-stream')
-const paramap = require('pull-paramap')
-const merge = require('pull-merge')
 const defer = require('pull-defer')
-const next = require('pull-next')
 const createView = require('flumeview-level')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
@@ -15,10 +12,10 @@ exports.version = require('./package.json').version
 exports.manifest = {
   history: 'source',
   heads: 'source',
-  current: 'source'
+  updates: 'source'
 }
 
-const IDXVER=2
+const IDXVER=3
 
 exports.init = function (ssb, config) {
   
@@ -26,7 +23,7 @@ exports.init = function (ssb, config) {
     const c = kv.value && kv.value.content
     const revisionRoot = c && c.revisionRoot || kv.key
     console.log('MAP', seq, revisionRoot)
-    return [[revisionRoot, seq]]
+    return [[revisionRoot, seq], [seq, revisionRoot]]
   })
 
   const sv = ssb._flumeUse('revisions', view)
@@ -43,7 +40,6 @@ exports.init = function (ssb, config) {
         sync: opts.sync
       }
     )
-    console.log(o)
     return pull(
       sv.read(o),
       pull.through(kv => {
@@ -122,7 +118,41 @@ exports.init = function (ssb, config) {
     return deferred
   }
 
-  // TODO: return revisions onstead of wrapped view
+  sv.updates = function(revRoot, opts) {
+    opts = opts || {}
+    const oldSeq = opts.since || -1
+    const newSeq = sv.since.value
+    console.log('from', oldSeq, 'to', newSeq)
+  
+    // what revRoots where changed
+    return pull(
+      sv.read({
+        gt: [oldSeq, null],
+        lte: [newSeq, undefined],
+        values: false,
+        keys: true,
+        seqs: false
+      }),
+      pull.map(([seq, revRoot]) => revRoot),
+      pull.unique(),
+      pull.asyncMap( (revRoot, cb) => {
+        const done = multicb({pluck: 1})
+        getValueAt(sv, revRoot, oldSeq, done())
+        getValueAt(sv, revRoot, newSeq, done())
+
+        done( (err, values) => {
+          if (err) return cb(err)
+          cb(null, {
+            key: revRoot,
+            old_value: values[0],
+            value: values[1]
+          })
+        })
+      })
+    )
+  }
+    
+  // TODO: return revisions instead of wrapped view
   //s.use = require('./indexing')(log, ssb.ready, s.current)
   //s.use('byBranch', require('./indexes/branch') )
 
@@ -130,6 +160,22 @@ exports.init = function (ssb, config) {
 }
 
 // utils ///////
+
+function getValueAt(sv, revRoot, at, cb) {
+  pull(
+    sv.heads(revRoot, {
+      lte: at,
+      keys: false,
+      values: true,
+      maxHeads: 1
+    }),
+    pull.collect((err, items) => {
+      if (err) return cb(err)
+      if (!items.length) return cb(null, null)
+      cb(null, items[0][0])
+    })
+  )
+}
 
 function stripSingleKey() {
   return pull.map( kv => {

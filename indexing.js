@@ -24,12 +24,7 @@ module.exports = function(log, ready, createStream) {
           console.log('destroying', name)
           sv.destroy(function () { build(-1) })
         } else {
-          var opts = {
-            live: true,
-            seqs: true,
-            values: true,
-            old_values: true
-          }
+          const opts = {}
           if (upto !== -1) opts.gt = upto
           if (upto == -1) opts.cache = false
 
@@ -44,7 +39,6 @@ module.exports = function(log, ready, createStream) {
                   console.error('error from sink:', err)
                   if (err !== true) console.error(explain(err, 'view stream error'))
                 }
-                // commented out, so that tests end
                 sv.since.once(build)
               //}
             })
