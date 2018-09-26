@@ -17,6 +17,7 @@
     "obv": "0.0.1",
     "pull-defer": "^0.2.3",
     "pull-looper": "^1.0.0",
+    "pull-next": "^1.0.1",
     "ssb-sort": "^1.1.0"
   },
   "devDependencies": {

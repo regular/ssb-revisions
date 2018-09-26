@@ -1,5 +1,6 @@
 const pull = require('pull-stream')
 const defer = require('pull-defer')
+const next = require('pull-next')
 const createView = require('flumeview-level')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
@@ -15,7 +16,7 @@ exports.manifest = {
   updates: 'source'
 }
 
-const IDXVER=3
+const IDXVER=4
 
 exports.init = function (ssb, config) {
   
@@ -23,7 +24,7 @@ exports.init = function (ssb, config) {
     const c = kv.value && kv.value.content
     const revisionRoot = c && c.revisionRoot || kv.key
     console.log('MAP', seq, revisionRoot)
-    return [[revisionRoot, seq], [seq, revisionRoot]]
+    return [['RS', revisionRoot, seq], ['SR', seq, revisionRoot]]
   })
 
   const sv = ssb._flumeUse('revisions', view)
@@ -32,7 +33,7 @@ exports.init = function (ssb, config) {
     opts = opts || {}
     // lt gt in opts are seqs
     const o = Object.assign(
-      getRange([revRoot], opts), {
+      getRange(['RS', revRoot], opts), {
         values: true,
         keys: false,
         seqs: false,
@@ -118,38 +119,58 @@ exports.init = function (ssb, config) {
     return deferred
   }
 
-  sv.updates = function(revRoot, opts) {
+  sv.updates = function(opts) {
     opts = opts || {}
-    const oldSeq = opts.since || -1
-    const newSeq = sv.since.value
-    console.log('from', oldSeq, 'to', newSeq)
-  
-    // what revRoots where changed
-    return pull(
-      sv.read({
-        gt: [oldSeq, null],
-        lte: [newSeq, undefined],
-        values: false,
-        keys: true,
-        seqs: false
-      }),
-      pull.map(([seq, revRoot]) => revRoot),
-      pull.unique(),
-      pull.asyncMap( (revRoot, cb) => {
-        const done = multicb({pluck: 1})
-        getValueAt(sv, revRoot, oldSeq, done())
-        getValueAt(sv, revRoot, newSeq, done())
+    const oldSeq = opts.since !== undefined ? opts.since : -1
+    const limit = opts.limit || 10
+    let newSeq = -1
+    let i = 0
+    return next( ()=> { switch(i++) {
+      case 0: 
+        const deferred = defer.source()
+        // what revRoots where changed?
+        pull(
+          sv.read({
+            gt: ['SR', oldSeq, null],
+            lte: ['SR', sv.since.value, undefined],
+            values: false,
+            keys: true,
+            seqs: false
+          }),
+          pull.through( ([_, seq, __]) => {
+            console.log('seq', seq)
+            newSeq = Math.max(newSeq, seq)
+          }),
+          pull.map(([_, __, revRoot]) => revRoot),
+          pull.unique(),
+          pull.take(limit),
+          pull.collect( (err, revRoots) => {
+            if (err) return deferred.resolve(pull.error(err))
+            console.log('from', oldSeq, 'to', newSeq)
+            deferred.resolve(
+              pull(
+                pull.values(revRoots),
+                pull.asyncMap( (revRoot, cb) => {
+                  const done = multicb({pluck: 1})
+                  getValueAt(sv, revRoot, oldSeq, done())
+                  getValueAt(sv, revRoot, newSeq, done())
 
-        done( (err, values) => {
-          if (err) return cb(err)
-          cb(null, {
-            key: revRoot,
-            old_value: values[0],
-            value: values[1]
+                  done( (err, values) => {
+                    if (err) return cb(err)
+                    cb(null, {
+                      key: revRoot,
+                      old_value: values[0],
+                      value: values[1]
+                    })
+                  })
+                })
+              )
+            )
           })
-        })
-      })
-    )
+        )
+        return deferred
+      case 1: return pull.once({since: newSeq})
+    } })
   }
     
   // TODO: return revisions instead of wrapped view
