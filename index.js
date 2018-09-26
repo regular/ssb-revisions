@@ -47,8 +47,8 @@ exports.init = function (ssb, config) {
     return pull(
       sv.read(o),
       pull.through(kv => {
-        if (opts.keys == false) kv.key = undefined
-        if (opts.values == false) kv.value = undefined
+        if (opts.keys == false) delete kv.key
+        if (opts.values == false) delete kv.value
       }),
       stripSingleKey()
     )
@@ -131,6 +131,7 @@ exports.init = function (ssb, config) {
 
 function stripSingleKey() {
   return pull.map( kv => {
+    if (kv.sync) return kv
     if (Object.keys(kv).length == 1) {
       for(let k in kv) return kv[k]
     }
