@@ -79,8 +79,10 @@ exports.init = function (ssb, config) {
         }
         revisions.push(kv)
         state.heads = heads(revRoot, revisions) 
-        if (meta && state.heads.length > 1) meta.forked = true
-        if (meta && incomplete(revisions, revRoot)) meta.incomplete = true
+        if (meta) {
+          meta.forked = state.heads.length > 1
+          meta.incomplete = incomplete(revisions, revRoot)
+        }
         return !live || (live && synced) ? [state] : null
       }),
       pull.filter(),
@@ -112,7 +114,7 @@ exports.init = function (ssb, config) {
     let lastState
     pull(
       stream,
-      pull.drain( result => { lastState = result}, err => {
+      pull.drain( result => { lastState = result }, err => {
         if (err) return deferred.resolve(pull.error(err))
         deferred.resolve(pull.once(lastState))
       })

@@ -17,6 +17,12 @@ test('gt, gte', t => {
   t.end()
 })
 
+test('gt=0', t => {
+  const gtr= gr([1], {gt: 0})
+  t.deepEqual(gtr, {gt: [1,0], lt: [1, undefined]})
+  t.end()
+})
+
 test('lt, lte', t => {
   const ltr= gr([1], {lt: 12})
   t.deepEqual(ltr, {gte: [1], lt: [1, 12]})
