@@ -36,16 +36,19 @@ exports.init = function (ssb, config) {
       getRange(['RS', revRoot], opts), {
         values: true,
         keys: false,
-        seqs: false,
+        seqs: true,
         live: opts.live,
         sync: opts.sync
       }
     )
     return pull(
       sv.read(o),
-      pull.through(kv => {
-        if (opts.keys == false) delete kv.key
-        if (opts.values == false) delete kv.value
+      pull.map(kvv => {
+        if (kvv.sync) return kvv
+        if (opts.keys == false) delete kvv.value.key
+        if (opts.values == false) delete kvv.value.value
+        if (opts.seqs) kvv.value.seq = kvv.seq
+        return kvv.value
       }),
       stripSingleKey()
     )
@@ -188,12 +191,20 @@ function getValueAt(sv, revRoot, at, cb) {
       lte: at,
       keys: true,
       values: true,
+      seqs: true,
+      meta: true,
       maxHeads: 1
     }),
     pull.collect((err, items) => {
+      console.log('getValueAt', items)
       if (err) return cb(err)
       if (!items.length) return cb(null, null)
-      cb(null, items[0][0])
+      cb(null, {
+        key: items[0].heads[0].key, 
+        value: items[0].heads[0].value, 
+        seq: items[0].heads[0].seq, 
+        meta: items[0].meta,
+      })
     })
   )
 }

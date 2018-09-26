@@ -263,3 +263,39 @@ test('history({lte: 123})', (t, db) => {
     )
   })
 })
+
+function append(db, msgs, cb) {
+  pull(
+    pull.values(msgs),
+    pull.asyncMap( (m, cb) => {
+      db.append(m, cb)
+    }),
+    pull.collect( (err, seqs)=>{
+      if (err) throw err
+      cb(seqs)
+    })
+  )
+}
+
+test('history (seqs)', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyB])
+
+  append(db, [a, b, c], seqs => {
+    pull(
+      db.revisions.history(keyA, {values: false, keys: false, seqs: true}),
+      pull.collect( (err, items) => {
+        t.notOk(err, 'no error')
+        console.log('items', items)
+        t.equal(items.length, 3)
+        t.deepEquals(items, seqs)
+        t.end()
+      })
+    )
+  })
+})
+
