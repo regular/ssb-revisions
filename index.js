@@ -15,6 +15,7 @@ exports.manifest = {
   history: 'source',
   heads: 'source',
   updates: 'source'
+  //indexingSource: 'source'
 }
 
 const IDXVER=4
@@ -138,6 +139,7 @@ exports.init = function (ssb, config) {
       case 0: 
         const deferred = defer.source()
         // what revRoots where changed?
+        console.log('sv.read', oldSeq, '-', sv.since.value)
         pull(
           sv.read({
             gt: ['SR', oldSeq, undefined],
@@ -154,6 +156,12 @@ exports.init = function (ssb, config) {
           pull.take(limit),
           pull.collect( (err, revRoots) => {
             if (err) return deferred.resolve(pull.error(err))
+            if (newSeq == -1 || newSeq == oldSeq) {
+              // we have not seen any revisions
+              console.log('empty set, oldSeq=', oldSeq)
+              newSeq = oldSeq
+              return deferred.resolve(pull.empty())
+            }
             console.log('from', oldSeq, 'to', newSeq)
             deferred.resolve(
               pull(
@@ -178,16 +186,58 @@ exports.init = function (ssb, config) {
         )
         return deferred
       case 1: return pull.once({since: newSeq})
-    } })
+    }})
   }
-    
-  const addView = Indexing(_log, ssb.ready, sv.updates)
+
+  sv.indexingSource = function(opts) {
+    opts = opts || {}
+    console.log('called indexingSource', opts)
+    let lastSince = opts.since
+    let synced = false  
+    return next( ()=> {
+      if (synced) {
+        synced = false
+        return pull(
+          function read(end, cb) {
+            console.log('read()')
+            if (end) return cb(end)
+            if (sv.since.value > lastSince) return cb(true)
+            console.log('waiting ...')
+            // wot for the next time 'since' is set
+            sv.since.once( ()=> cb(true), false )
+          }
+        )
+      }
+      console.log('pulling non-live updates since', lastSince)
+      return pull(
+        sv.updates({since: lastSince}),
+        pull.map( (kvv, cb) => {
+          if (kvv.since !== undefined) {
+            console.log('received since', kvv.since)
+            if (kvv.since == lastSince) {
+              console.log('synced!')
+              synced = true
+              return null
+            } else {
+              lastSince = kvv.since
+            }
+          }
+          return kvv
+        }),
+        pull.filter()
+      )
+    })
+  }
+
+  /*
+  const addView = Indexing(_log, ssb.ready, sv.indexingSource)
   sv.use = function(name, createView) {
     sv[name] = addView(name, createView)
     return sv
   }
+  */
 
-  //s.use('byBranch', require('./indexes/branch') )
+  //sv.use('branch', require('./indexes/branch') )
 
   return sv
 }

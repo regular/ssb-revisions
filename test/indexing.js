@@ -1,337 +1,191 @@
-  const pull = require('pull-stream')
-  const multicb = require('multicb')
-  const {test, msg, rndKey} = require('./test-helper')
+const pull = require('pull-stream')
+const multicb = require('multicb')
+const {test, msg, rndKey} = require('./test-helper')
 
-/*
+function slow() {
+  return pull.asyncMap( (x, cb) => {
+    setTimeout( ()=> cb(null, x), 100 )
+  })
+}
 
-  test('updates should be sorted by since', (t, db) => {
-    const keyA = rndKey()
-    const keyA1 = rndKey()
-    const keyB = rndKey()
-    const keyB1 = rndKey()
-    const keyC = rndKey()
-    const keyC1 = rndKey()
-    db.append([
-      msg(keyB1, keyB, [keyB]),
-      msg(keyC),
-      msg(keyB),
-      msg(keyC1, keyC, [keyC]),
-      msg(keyA1, keyA, [keyA]),
-      msg(keyA)
-    ], (err, data) => {
-      pull(
-        db.revisions.updates(),
-        pull.collect( (err, result) => {
-          console.log('result', JSON.stringify(result, null, 2))
-          t.error(err, 'no error')
-          // NOTE: we get four entries,
-          // one for the lastest revisions of A, B and c and
-          // an additional {since:} so the index can update
-          // its since observable, indicating that it is up-to-date with the log.
-          t.equal(result.length, 4, 'should have four entries')
-          t.deepEqual(
-            result.sort( (a,b) => a.since - b.since),
-            result
-          )
-          db.close( ()=> t.end())
-        })
-      )
+function append(db, msgs, cb) {
+  pull(
+    pull.values(msgs),
+    pull.asyncMap( (m, cb) => {
+      db.append(m, cb)
+    }),
+    pull.collect( (err, seqs)=>{
+      if (err) throw err
+      cb(seqs)
     })
-  })
-
-  test('current(): shadowed original', (t, db) => {
-    const keyA = rndKey()
-    const keyB = rndKey()
-    let a, b
-    db.append([
-      b = msg(keyB, keyA, [keyA]),
-      a = msg(keyA),
-    ], (err, data) => {
-      pull(
-        db.revisions.current(),
-        pull.collect( (err, result) => {
-          console.log('result', JSON.stringify(result, null, 2))
-          t.error(err, 'no error')
-          t.equal(result.length, 2, 'should have two entries')
-          t.deepEqual(result[0].value, b, 'should have correct value')
-          t.notOk(result[1].value, 'should have no value')
-          t.ok(result[1].since, 'should have since value > 0')
-          db.close( ()=> t.end())
-        })
-      )
-    })
-  })
-
-  test('originals({live:true})', (t, db) => {
-    const keyA = rndKey()
-    const keyB = rndKey()
-    const keyC = rndKey()
-    let a, b, c, n=0
-    const done = multicb()
-    pull(
-      db.revisions.originals({live: true}),
-      pull.drain( result => {
-        n++
-        console.log(n, result)
-        if (n==1) {
-          t.equal(result.value.key, keyA)
-          t.deepEqual(result.value, a)
-          t.equal(result.since, 0)
-        } else if (n==2) {
-          t.notOk(result.value, 'Should not have a value')
-          t.equal(typeof result.since, 'number', 'since should be a number')
-        } else if (n==3) {
-          t.equal(result.value.key, keyC)
-          t.deepEqual(result.value, c)
-          t.equal(typeof result.since, 'number', 'since should be a number')
-          return false
-        } 
-      }, done())
-    )
-    db.append([
-      a = msg(keyA),
-      b = msg(keyB, keyA, [keyA]),
-      c = msg(keyC)
-    ], done())
-    done( ()=> db.close( ()=> t.end()) )
-  })
-
-  test('updates({live:true, old: false}) includes original', (t, db) => {
-    const keyA = rndKey()
-    const keyB = rndKey()
-    const keyC = rndKey()
-    let a, b, c, n=0
-    const done = multicb()
-    pull(
-      db.revisions.updates({live: true, old:false}),
-      pull.drain( result => {
-        n++
-        console.log(n, result)
-        if (n==1) {
-          t.equal(result.value.key, keyA)
-          t.deepEqual(result.value, a)
-        t.equal(typeof result.since, 'number', 'since is a number')
-      } else if (n==2) {
-        t.equal(result.value.key, keyB)
-        t.deepEqual(result.value, b)
-        t.equal(typeof result.since, 'number', 'since is a number')
-      } else if (n==3) {
-        t.equal(result.value.key, keyC)
-        t.deepEqual(result.value, c)
-        t.equal(typeof result.since, 'number', 'since is a number')
-        return false
-      } 
-    }, done())
   )
-  db.append([
-    a = msg(keyA),
-    b = msg(keyB, keyA, [keyA]),
-    c = msg(keyC, keyA, [keyB])
-  ], done()) 
-  done( ()=> db.close( ()=> t.end()) )
-})
+}
 
-test('current({live:true})', (t, db) => {
-  const keyA = rndKey()
-  const keyA1 = rndKey()
-  const keyA2 = rndKey()
-  let a, b, c, n=0
-
-  const done = multicb()
-
-  pull(
-    db.revisions.current({live: true}),
-    pull.drain( result => {
-      n++
-      console.log('current', n, result)
-      if (n==1) {
-        t.equal(result.since, -1, '{sinceL -1}')
-        t.notOk(result.value, 'should have no value')
-      } else if (n==2) {
-        t.equal(result.value.key, keyA)
-        t.deepEqual(result.value, a)
-        t.equal(result.since, 0)
-      } else if (n==3) {
-        t.equal(result.value.key, keyA1)
-        t.deepEqual(result.value, b)
-        t.equal(typeof result.since, 'number', 'since is a number')
-      } else if (n==4) {
-        t.equal(result.value.key, keyA2)
-        t.deepEqual(result.value, c)
-        t.equal(typeof result.since, 'number', 'since is a number')
-        return false
-      }
-    }, done())
-  )
-
-  db.append([
-    a = msg(keyA),
-    b = msg(keyA1, keyA, [keyA]),
-    c = msg(keyA2, keyA, [keyA1])
-  ], done())
-
-  done( err => {
-    console.log('we are all done', err)
-    db.close( ()=> t.end()) 
-  })
-})
-
-test('current({live:true}): rev before orig', (t, db) => {
-  const keyA = rndKey()
-  const keyA1 = rndKey()
-  let a, b, n=0
-
-  const done = multicb()
-
-  pull(
-    db.revisions.current({live: true}),
-    pull.drain( result => {
-      n++
-      console.log('current', n, result)
-      if (n==1) {
-        t.deepEqual(result, {since:-1}, 'First item is {since:-1}')
-        t.notOk(result.value, 'should have no vslue')
-      } else if (n==2) {
-        t.equal(result.value.key, keyA1)
-        t.deepEqual(result.value, b)
-        t.equal(result.since, 0)
-      } else if (n==3) {
-        t.notOk(result.value, 'should have no vslue')
-        t.equal(typeof result.since, 'number', 'since is a number')
-        return false
-      }
-    }, done())
-  )
-
-  db.append([
-    b = msg(keyA1, keyA, [keyA]),
-    a = msg(keyA)
-  ], done())
-
-  done( err => {
-    console.log('we are all done', err)
-    db.close( ()=> t.end()) 
-  })
-})
-
-test('current({live:true}): shadowed revision', (t, db) => {
-  const keyA = rndKey()
-  const keyB = rndKey()
-  const keyC = rndKey()
-  let a, b, c, n=0
-
-  const done = multicb()
-
-  pull(
-    db.revisions.current({live: true}),
-    pull.drain( result => {
-      n++
-      console.log('current', n, result)
-      if (n==1) {
-        t.deepEqual(result, {since:-1}, 'First item is {since:-1}')
-        t.notOk(result.value, 'should have no vslue')
-      } else if (n==2) {
-        t.equal(result.value.key, keyA)
-        t.deepEqual(result.value, a)
-        t.equal(result.since, 0)
-      } else if (n==3) {
-        t.equal(result.value.key, keyC)
-        t.deepEqual(result.value, c)
-        t.equal(typeof result.since, 'number', 'since is a number')
-      } else if (n==4) {
-        t.notOk(result.value, 'should have no vslue')
-        t.equal(typeof result.since, 'number', 'since is a number')
-        return false
-      }
-    }, done())
-  )
-
-  db.append([
-    a = msg(keyA),
-    c = msg(keyC, keyA, [keyB]),
-    b = msg(keyB, keyA, [keyA])
-  ], done())
-
-  done( err => {
-    console.log('we are all done', err)
-    db.close( ()=> t.end()) 
-  })
-})
-
-test('updates() streams latest update since opts.gt', (t, db) => {
+test('indexingSource (from start, out of order, waiting path)', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
   const keyC = rndKey()
   const keyD = rndKey()
-  let a, b, c
-  db.append([
-    a = msg(keyA),
-    b = msg(keyB, keyA, [keyA])
-  ], (err, data) => {
-    pull(
-      db.revisions.updates(),
-      pull.collect( (err, result) => {
-        console.log('result', result)
-        t.error(err, 'no error')
-        t.equal(result.length, 2, 'should have two entries')
-        t.deepEqual(result[0].value, b)
-        t.equal(result[0].seq, 123, 'Should have seq')
-        t.deepEqual(result[1], {since: 123}, 'Should have new since value')
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyB])
+  const d = msg(keyD, keyA, [keyC])
 
-        db.append([
-          c = msg(keyC, keyA, [keyB]),
-          d = msg(keyD, keyA, [keyC])
-        ], (err, data) => {
+  append(db, [a, c], seqs => {
+    // wait for revisions view to be synced with db
+    let i=-1
+    db.revisions.since( since => {
+      console.log('sv is at ', since)
+      if (i>-1 || since < seqs.slice(-1)[0]) return
 
-          pull(
-            db.revisions.updates({gt: 123, old_values: true}),
-            pull.collect( (err, result) => {
-              console.log('result', result)
-              t.error(err, 'no error')
-              t.equal(result.length, 2, 'should have two entries')
-              t.deepEqual(result[0].value, d)
-              t.equal(result[0].seq, 655, 'Should have seq')
-              t.equal(result[0].old_seq, 123, 'Should have old_seq')
-              t.deepEqual(result[0].old_value, b)
+      i = 0
+      pull(
+        db.revisions.indexingSource(),
+        //slow(),
+        pull.drain( kvv => {
+          i++
+          console.log('i', i, kvv)
+          if (i==1) {
+            t.equal(kvv.key, keyA)
+            t.equal(kvv.value.key, keyC)
+            t.deepEqual(kvv.value.value, c.value)
+            t.ok(kvv.value.meta.incomplete)
+            t.notOk(kvv.old_value)
+            return
+          }
+          if (i==2) {
+            t.equal(kvv.since, seqs[1])
+            t.notOk(kvv.value)
+            t.notOk(kvv.old_value)
+            
+            setTimeout( ()=> {
+              append(db, [b, d], newSeqs => {
+                seqs = seqs.concat(newSeqs)
+              })
+            }, 100)
+            return
+          }
+          if (i==3) {
+            t.equal(kvv.key, keyA)
+            t.equal(kvv.value.key, keyC)
+            t.deepEqual(kvv.value.value, c.value)
+            t.notOk(kvv.value.meta.incomplete, 'is complete now')
 
-              t.notOk(result[1].value, 'SHould have no value')
-              t.equal(typeof result[1].since, 'number', 'Since should be a number')
+            t.equal(kvv.old_value.key, keyC)
+            t.deepEqual(kvv.old_value.value, c.value)
+            t.ok(kvv.old_value.meta.incomplete, 'was incomplete')
+            return
+          }
+          if (i==4) {
+            t.equal(kvv.since, seqs[2])
+            t.notOk(kvv.value)
+            t.notOk(kvv.old_value)
+            return
+          }
+          if (i==5) {
+            t.equal(kvv.key, keyA)
+            t.equal(kvv.value.key, keyD)
+            t.deepEqual(kvv.value.value, d.value)
 
-              db.close( ()=> t.end())
-            })
-          )
+            t.equal(kvv.old_value.key, keyC)
+            t.deepEqual(kvv.old_value.value, c.value)
+            return
+          }
+          if (i==6) {
+            t.equal(kvv.since, seqs[3])
+            t.notOk(kvv.value)
+            t.notOk(kvv.old_value)
+            return false
+          }
+        }, end => {
+          console.log('drain end', end)
+          t.equal(i, 6, 'Should have seen the entire stream')
+          t.equal(end, true)
+          db.close( ()=> t.end() )
         })
-      })
-    )
+      )
+    })
   })
 })
 
-test('current({live: true, old_values: true})', (t, db) => {
+test('indexingSource (from start, out of order, non-waiting path)', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
-  let a, b, n=0
+  const keyC = rndKey()
+  const keyD = rndKey()
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyB])
+  const d = msg(keyD, keyA, [keyC])
 
-  db.append([
-    a = msg(keyA),
-    b = msg(keyB, keyA, [keyA])
-  ], err => {
-    t.error(err)
-    pull(
-      db.revisions.current({live: true, gt: 0, old_values: true}),
-      pull.drain( result => {
-        n++
-        console.log('current', n, result)
-        if (n==1) {
-          t.equal(result.value.key, keyB)
-          t.deepEqual(result.value, b) 
-          t.deepEqual(result.old_value, a) 
-          return false
-        }
-      }, err=>{
-        console.log('we are all done', err)
-        db.close( ()=> t.end()) 
-      })
-    )
+  append(db, [a, c], seqs => {
+    // wait for revisions view to be synced with db
+    let i=-1
+    db.revisions.since( since => {
+      console.log('sv is at ', since)
+      if (i>-1 || since < seqs.slice(-1)[0]) return
+
+      i = 0
+      pull(
+        db.revisions.indexingSource(),
+
+        // makse sure b and d are processed as one block
+        pull.asyncMap( (kvv, cb) => {
+          i++
+          console.log('i', i, kvv)
+          if (i==1) {
+            t.equal(kvv.key, keyA)
+            t.equal(kvv.value.key, keyC)
+            t.deepEqual(kvv.value.value, c.value)
+            t.ok(kvv.value.meta.incomplete)
+            t.notOk(kvv.old_value)
+            return cb(null, kvv)
+          }
+          if (i==2) {
+            t.equal(kvv.since, seqs[1])
+            t.notOk(kvv.value)
+            t.notOk(kvv.old_value)
+
+            console.log('Appending b, d ...')
+            append(db, [b, d], newSeqs => {
+              console.log('indexing b, d ...')
+              seqs = seqs.concat(newSeqs)
+              db.revisions.since( s =>{
+                if (s == seqs[3]) {
+                  cb(null, kvv)
+                  console.log('done indexing b, d')
+                }
+              })
+            })
+          }
+          if (i==3) {
+            t.equal(kvv.key, keyA)
+            t.equal(kvv.value.key, keyD)
+            t.deepEqual(kvv.value.value, d.value)
+            t.notOk(kvv.value.meta.incomplete, 'is complete now')
+
+            t.equal(kvv.old_value.key, keyC)
+            t.deepEqual(kvv.old_value.value, c.value)
+            t.ok(kvv.old_value.meta.incomplete, 'was incomplete')
+            return cb(null, kvv)
+          }
+          if (i==4) {
+            t.equal(kvv.since, seqs[3])
+            t.notOk(kvv.value)
+            t.notOk(kvv.old_value)
+            return cb(true)
+          }
+        }),
+
+        pull.drain( kvv => {}, end => {
+          console.log('drain end', end)
+          t.equal(i, 4, 'Should have seen the entire stream')
+          t.equal(end, null)
+          db.close( ()=> t.end() )
+        })
+      )
+    })
   })
 })
-*/
+
+

@@ -25,7 +25,7 @@ module.exports = function(log, ready, createStream) {
           sv.destroy(function () { build(-1) })
         } else {
           const opts = {}
-          if (upto !== -1) opts.since = upto // TODO: call it gt?
+          if (upto !== -1 && upto !== null) opts.since = upto // TODO: call it gt?
           if (upto == -1) opts.cache = false
 
           console.log('Indexing opts are:', JSON.stringify(opts))
