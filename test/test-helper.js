@@ -31,14 +31,20 @@ function fresh(cb) {
     '/tmp/test-ssb-revisions-' + ts()+'/bla',
     {blockSize: 1024, codec}
   ))
-
+  
+  let done = false
   Revisions.init({
     ready: db.ready,
     get: db.get,
     _flumeUse: (name, view) => {
       db.use(name, view)
       const sv = db[name]
-      sv.ready( ()=> {cb(null, db)} )
+      sv.ready( ready => {
+        if (ready || !done) {
+          done = true
+          cb(null, db)
+        }
+      })
       return sv
     }
   }, {

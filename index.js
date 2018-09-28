@@ -15,7 +15,6 @@ exports.manifest = {
   history: 'source',
   heads: 'source',
   updates: 'source'
-  //indexingSource: 'source'
 }
 
 const IDXVER=4
@@ -132,7 +131,7 @@ exports.init = function (ssb, config) {
   sv.updates = function(opts) {
     opts = opts || {}
     const oldSeq = opts.since !== undefined ? opts.since : -1
-    const limit = opts.limit || 10
+    const limit = opts.limit || 10 // TODO
     let newSeq = -1
     let i = 0
     return next( ()=> { switch(i++) {
@@ -198,20 +197,23 @@ exports.init = function (ssb, config) {
       if (synced) {
         synced = false
         return pull(
-          function read(end, cb) {
-            console.log('read()')
-            if (end) return cb(end)
-            if (sv.since.value > lastSince) return cb(true)
-            console.log('waiting ...')
-            // wot for the next time 'since' is set
-            sv.since.once( ()=> cb(true), false )
-          }
+          (()=>{
+            let ended
+            return function read(end, cb) {
+              ended = end || ended
+              if (ended) return cb(ended)
+              if (sv.since.value > lastSince) return cb(true)
+              console.log('waiting ...')
+              // wait for the next time 'since' is set
+              sv.since.once( ()=> cb(true), false )
+            }
+          })()
         )
       }
       console.log('pulling non-live updates since', lastSince)
       return pull(
         sv.updates({since: lastSince}),
-        pull.map( (kvv, cb) => {
+        pull.map( kvv => {
           if (kvv.since !== undefined) {
             console.log('received since', kvv.since)
             if (kvv.since == lastSince) {
@@ -229,13 +231,25 @@ exports.init = function (ssb, config) {
     })
   }
 
-  /*
   const addView = Indexing(_log, ssb.ready, sv.indexingSource)
   sv.use = function(name, createView) {
+    console.log('ssb-revisions.use', name)
     sv[name] = addView(name, createView)
+  
+    ssb._flumeUse(name, (log, name) => {
+      console.log('Calling fake createView')
+      function ViewProxy() {
+        this.createSink = function() {
+          console.log('Calling fake createSink')
+          return pull.drain()
+        }
+      }
+      ViewProxy.prototype = sv[name].unwrapped
+      return new ViewProxy()
+    })
+  
     return sv
   }
-  */
 
   //sv.use('branch', require('./indexes/branch') )
 

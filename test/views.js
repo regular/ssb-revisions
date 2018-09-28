@@ -10,6 +10,7 @@ function fooMsg(key, revRoot, revBranch, foo) {
 }
 
 test('use() registers a view', (t, db) => {
+  console.log('running test')
   
   function createView(log, name) {
     const since = Obv()
@@ -50,6 +51,8 @@ test('use() registers a view', (t, db) => {
     }
   }
 
+
+  console.log('calling use() from test')
   db.revisions.use('bar', createView)
   t.ok(db.revisions.bar, 'db.revisions has property bar')
   t.equal(typeof db.revisions.bar.foo, 'function', 'foo is a function')

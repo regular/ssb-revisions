@@ -16,6 +16,7 @@ module.exports = function(log, ready, createStream) {
     var sv = createView(log, name)
 
     views[name] = wrap(sv, log.since, ready)
+    views[name].unwrapped = sv
     meta[name] = views[name].meta
 
     sv.since.once(function build (upto) {
