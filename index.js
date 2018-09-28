@@ -14,7 +14,8 @@ exports.version = require('./package.json').version
 exports.manifest = {
   history: 'source',
   heads: 'source',
-  updates: 'source'
+  updates: 'source',
+  stats: 'async'
 }
 
 const IDXVER=4
@@ -251,6 +252,8 @@ exports.init = function (ssb, config) {
     return sv
   }
 
+  sv.use('revisionsStats', require('./indexes/stats'))
+  sv.stats = sv.revisionsStats.get
   //sv.use('branch', require('./indexes/branch') )
 
   return sv
