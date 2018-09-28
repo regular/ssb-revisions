@@ -8,6 +8,7 @@ const multicb = require('multicb')
 
 const getRange = require('./get_range')
 const Indexing = require('./indexing')
+const Stats = require('./indexes/stats')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -252,7 +253,7 @@ exports.init = function (ssb, config) {
     return sv
   }
 
-  sv.use('revisionsStats', require('./indexes/stats'))
+  sv.use('revisionsStats', Stats())
   sv.stats = sv.revisionsStats.get
   //sv.use('branch', require('./indexes/branch') )
 

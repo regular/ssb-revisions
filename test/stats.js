@@ -1,60 +1,38 @@
 const pull = require('pull-stream')
 const multicb = require('multicb')
 const {test, msg, rndKey} = require('./test-helper')
+const Stats = require('../indexes/stats')
 
-/*
-test('stats: forks', (t, db) => {
-  const keyA = rndKey()
-  const keyB = rndKey()
-  const keyC = rndKey()
-  const keyD = rndKey()
+function fooMsg(key, revRoot, revBranch, foo) {
+  const ret = msg(key, revRoot, revBranch)
+  ret.value.content.foo = foo
+  return ret
+}
 
-  const a = msg(keyA)
-  const b = msg(keyB, keyA, [keyA])
-  const c = msg(keyC, keyA, [keyA]) // fork
-  const d = msg(keyD, keyA, [keyB, keyC]) // merge
+test('use() registers a view', (t, db) => {
+  db.revisions.use('revStats', Stats())
+  t.ok(db.revisions.revStats, 'db.revisions has property revStats')
+  t.equal(typeof db.revisions.revStats.get, 'function', 'revStats.get is a function')
 
-  let i = 0
+  const keyA  = rndKey()
+  const keyA1 = rndKey()
+  const keyA2 = rndKey()
+  const keyB  = rndKey()
+  const keyB2 = rndKey()
 
-  pull(
-    db.revisions.stats({live: true}),
-    pull.drain( s=> {
-      console.log(s)
-      t.equals(s.revisions, [0,1,2,3][i], 'revisions')
-      t.equals(s.forks, [0,0,1,0][i], 'forks')
-      t.equals(s.incomplete, [0,0,0,0][i], 'incomplete')
-      i++
-    }, err => {
-      t.notOk(err, 'no error')
-      t.equals(i, 4, 'four status updates')
-      db.close( ()=> t.end())
+  db.append([
+    fooMsg(keyA1, keyA, [keyA], 'bar2'),
+    fooMsg(keyA, null, [], 'bar1'),
+    fooMsg(keyA2, keyA, [keyA], 'bar3'),
+    fooMsg(keyB2, keyB, [keyB], 'baz')
+  ], (err, seq) => {
+    t.error(err)
+    console.log('Waiting for', seq)
+    db.revisions.revStats.get( (err, data) => {
+      t.error(err)
+      t.equal(db.revisions.revStats.since.value, seq, 'Should have waited until view is uo-to-date')
+      t.deepEqual(data, { incomplete: 1, forked: 1 }, 'stats should be correct')
+      db.close( ()=> t.end() )
     })
-  )
+  })
 })
-
-test('stats: incomplete', (t, db) => {
-  const keyA = rndKey()
-  const keyB = rndKey()
-  const keyC = rndKey()
-
-  const a = msg(keyA)
-  const b = msg(keyB, keyA, [keyA])
-  const c = msg(keyC, keyA, [keyB])
-
-  let i = 0
-
-  pull(
-    db.revisions.stats({live: true}),
-    pull.drain( s=> {
-      console.log(s)
-      t.equals(s.incomplete, [0,1,0][i])
-      t.equals(s.forks, [0,0,0][i])
-      i++
-    }, err => {
-      t.notOk(err, 'no error')
-      t.equals(i, 3, 'three status updates')
-      db.close( ()=> t.end())
-    })
-  )
-})
-*/
