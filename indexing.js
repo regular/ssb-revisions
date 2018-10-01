@@ -4,7 +4,7 @@ const Looper = require('pull-looper')
 const pull = require('pull-stream')
 const explain = require('explain-error')
 
-module.exports = function(log, ready, createStream) {
+module.exports = function(db, log, ready, createStream) {
   const views = {}
   const meta = {}
 
@@ -35,13 +35,13 @@ module.exports = function(log, ready, createStream) {
             createStream(opts),
             Looper,
             sv.createSink(function (err) {
-              //if(!flume.closed) {
+              if (db.closed !== true) {
                 if(err) {
                   console.error('error from sink:', err)
                   if (err !== true) console.error(explain(err, 'view stream error'))
                 }
                 sv.since.once(build)
-              //}
+              }
             })
           )
         }

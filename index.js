@@ -233,11 +233,12 @@ exports.init = function (ssb, config) {
     })
   }
 
-  const addView = Indexing(_log, ssb.ready, sv.indexingSource)
+  const addView = Indexing(ssb, _log, ssb.ready, sv.indexingSource)
   sv.use = function(name, createView) {
     console.log('ssb-revisions.use', name)
     sv[name] = addView(name, createView)
-  
+
+    /*
     ssb._flumeUse(name, (log, name) => {
       console.log('Calling fake createView')
       function ViewProxy() {
@@ -249,12 +250,12 @@ exports.init = function (ssb, config) {
       ViewProxy.prototype = sv[name].unwrapped
       return new ViewProxy()
     })
-  
+    */
     return sv
   }
 
-  sv.use('revisionsStats', Stats())
-  sv.stats = sv.revisionsStats.get
+  sv.use('Stats', Stats())
+  sv.stats = sv.Stats.unwrapped.get
   //sv.use('branch', require('./indexes/branch') )
 
   return sv
