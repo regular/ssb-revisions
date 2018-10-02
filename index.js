@@ -13,6 +13,7 @@ const Stats = require('./indexes/stats')
 exports.name = 'revisions'
 exports.version = require('./package.json').version
 exports.manifest = {
+  close: 'async',
   history: 'source',
   heads: 'source',
   updates: 'source',
@@ -252,6 +253,17 @@ exports.init = function (ssb, config) {
     })
     */
     return sv
+  }
+
+  const close = sv.close
+  sv.close = function(cb) {
+    console.log('ssb-revisions: closing dependent views')
+    addView.close(()=>{
+      if (close) {
+        console.log('calling orig close')
+        close(cb) 
+      } else cb()
+    })
   }
 
   sv.use('Stats', Stats())
