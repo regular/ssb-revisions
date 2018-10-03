@@ -16,11 +16,12 @@ exports.manifest = {
   close: 'async',
   history: 'source',
   heads: 'source',
-  updates: 'source',
-  stats: 'async'
+  updates: 'source'
+  //getStats: 'async',
+  //streamStats: 'source'
 }
 
-const IDXVER=4
+const IDXVER=5
 
 exports.init = function (ssb, config) {
   let _log
@@ -266,9 +267,9 @@ exports.init = function (ssb, config) {
     })
   }
 
-  sv.use('Stats', Stats())
-  sv.stats = sv.Stats.unwrapped.get
-  //sv.use('branch', require('./indexes/branch') )
+  //sv.use('Stats', Stats())
+  //sv.getStats = sv.Stats.unwrapped.get
+  //sv.streamStats = sv.Stats.unwrapped.stream
 
   return sv
 }
