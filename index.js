@@ -16,9 +16,9 @@ exports.manifest = {
   close: 'async',
   history: 'source',
   heads: 'source',
-  updates: 'source'
-  //getStats: 'async',
-  //streamStats: 'source'
+  updates: 'source',
+  getStats: 'async',
+  streamStats: 'source'
 }
 
 const IDXVER=5
@@ -267,9 +267,9 @@ exports.init = function (ssb, config) {
     })
   }
 
-  //sv.use('Stats', Stats())
-  //sv.getStats = sv.Stats.unwrapped.get
-  //sv.streamStats = sv.Stats.unwrapped.stream
+  sv.use('Stats', Stats())
+  sv.getStats = sv.Stats.unwrapped.get
+  sv.streamStats = sv.Stats.unwrapped.stream
 
   return sv
 }
@@ -335,7 +335,21 @@ function incomplete(msgs, revRoot) {
 }
 
 function heads(revisionRoot, revisions) {
-  const hds = ssbsort.heads(revisions)
+  const strippedRevs = revisions.map( kv => {
+    const {revisionRoot, revisionBranch} = kv.value.content
+    return {
+      key: kv.key,
+      value: {
+        timestamp: kv.value.timestamp,
+        content: {
+          revisionRoot,
+          revisionBranch
+        }
+      }
+    }
+  })
+
+  const hds = ssbsort.heads(strippedRevs)
   const revs = revisions.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
   return hds.map( k => revs[k] ).sort(compare)
 }

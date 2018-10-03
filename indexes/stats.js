@@ -2,7 +2,7 @@ const Reduce = require('ssb-review-reduce')
 
 module.exports = function() {
   return Reduce(
-    9,
+    11,
     (acc, newMeta, newSeq, oldMeta, oldSeq) => {
       console.log('newMeta', newMeta)
       if (newMeta.incomplete && !(oldMeta && oldMeta.incomplete))
