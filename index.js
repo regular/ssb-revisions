@@ -140,9 +140,13 @@ exports.init = function (ssb, config) {
     let i = 0
     return next( ()=> { switch(i++) {
       case 0: 
+        console.log('sv.read', oldSeq, '-', sv.since.value)
+        if (oldSeq == sv.since.value) {
+          newSeq = oldSeq
+          return pull.empty()
+        }
         const deferred = defer.source()
         // what revRoots where changed?
-        console.log('sv.read', oldSeq, '-', sv.since.value)
         pull(
           sv.read({
             gt: ['SR', oldSeq, undefined],
