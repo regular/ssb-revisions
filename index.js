@@ -10,6 +10,7 @@ const debug = require('debug')('ssb-revisions')
 const getRange = require('./get_range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
+const Branch = require('./indexes/branch')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -18,8 +19,8 @@ exports.manifest = {
   history: 'source',
   heads: 'source',
   updates: 'source',
-  getStats: 'async',
-  streamStats: 'source'
+  stats: 'source',
+  messagesByBranch: 'source'
 }
 
 const IDXVER=5
@@ -273,8 +274,10 @@ exports.init = function (ssb, config) {
   }
 
   sv.use('Stats', Stats())
-  sv.getStats = sv.Stats.unwrapped.get
-  sv.streamStats = sv.Stats.unwrapped.stream
+  sv.stats = sv.Stats.unwrapped.stream
+
+  sv.use('Branch', Branch())
+  sv.messagesByBranch = opts => sv.Branch.unwrapped.read(opts || {})
 
   return sv
 }

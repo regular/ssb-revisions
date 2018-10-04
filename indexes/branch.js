@@ -1,7 +1,11 @@
-const FlumeReviewLevel = require('flumereview-level')
+const Index = require('ssb-review-level')
  
-module.exports = FlumeReviewLevel(8, function map (value, seq, old_value, old_seq) {
-    console.log('BRANCH INDEX SEQ', seq, old_seq)
-    console.log('branch index values', JSON.stringify({value, old_value}, null, 2))
-    return []
-})
+module.exports = function () {
+  return Index(1, function map (kv) {
+    console.log('BRANCH MAP', kv)
+    const value = kv.value
+    let branches = value && value.content && value.content.branch || []
+    if (!Array.isArray(branches)) branches = [branches]
+    return branches.map(b => [b, kv.key])
+  })
+}
