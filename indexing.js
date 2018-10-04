@@ -39,8 +39,8 @@ module.exports = function(db, log, ready, createStream) {
             sv.createSink(function (err) {
               if (db.closed !== true) {
                 if(err) {
-                  console.error('error from sink:', err)
-                  if (err !== true) console.error(explain(err, 'view stream error'))
+                  console.error('error from sink:', err.message)
+                  if (err !== true && err.message !== 'aborted') console.error(explain(err, 'view stream error'))
                 }
                 sv.since.once(build)
               }
@@ -58,7 +58,7 @@ module.exports = function(db, log, ready, createStream) {
     if (closed) return cb()
     closed = true
     const done = multicb({pluck:1})
-    for(name in views) {
+    for(let name in views) {
       if (views[name].close) views[name].close(done())
     }
     done(cb)
