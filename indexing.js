@@ -31,7 +31,7 @@ module.exports = function(db, log, ready, createStream) {
           if (upto !== -1 && upto !== null) opts.since = upto // TODO: call it gt?
           if (upto == -1) opts.cache = false
 
-          console.log('Indexing opts are:', JSON.stringify(opts))
+          //console.log('Indexing opts are:', JSON.stringify(opts))
 
           pull(
             createStream(opts),

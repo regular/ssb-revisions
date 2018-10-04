@@ -40,10 +40,8 @@ module.exports = function wrap(sv, since, isReady) {
     },
     async: function (fn, name) {
       return function (opts, cb) {
-        console.log('async wrapper for', name, 'log', since.value, 'sv', sv.since.value)
         meta[name] ++
         ready(function () {
-          console.log('async wrapper exec', name, 'log', since.value, 'sv', sv.since.value)
           fn(opts, cb)
         })
       }

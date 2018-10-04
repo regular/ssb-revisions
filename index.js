@@ -29,7 +29,7 @@ exports.init = function (ssb, config) {
   const createView = CreateView(IDXVER, (kv, seq) => {
     const c = kv.value && kv.value.content
     const revisionRoot = c && c.revisionRoot || kv.key
-    console.log('MAP', seq, revisionRoot)
+    //console.log('MAP', seq, revisionRoot)
     return [['RS', revisionRoot, seq], ['SR', seq, revisionRoot]]
   })
 
@@ -140,7 +140,7 @@ exports.init = function (ssb, config) {
     let i = 0
     return next( ()=> { switch(i++) {
       case 0: 
-        console.log('sv.read', oldSeq, '-', sv.since.value)
+        //console.log('sv.read', oldSeq, '-', sv.since.value)
         if (oldSeq == sv.since.value) {
           newSeq = oldSeq
           return pull.empty()
@@ -165,7 +165,7 @@ exports.init = function (ssb, config) {
             if (err) return deferred.resolve(pull.error(err))
             if (newSeq == -1 || newSeq == oldSeq) {
               // we have not seen any revisions
-              console.log('empty set, oldSeq=', oldSeq)
+              //console.log('empty set, oldSeq=', oldSeq)
               newSeq = oldSeq
               return deferred.resolve(pull.empty())
             }
@@ -218,14 +218,14 @@ exports.init = function (ssb, config) {
           })()
         )
       }
-      console.log('pulling non-live updates since', lastSince)
+      //console.log('pulling non-live updates since', lastSince)
       return pull(
         sv.updates({since: lastSince}),
         pull.map( kvv => {
           if (kvv.since !== undefined) {
             console.log('received since', kvv.since)
             if (kvv.since == lastSince) {
-              console.log('synced!')
+              //console.log('synced!')
               synced = true
               return null
             } else {
@@ -265,7 +265,7 @@ exports.init = function (ssb, config) {
     console.log('ssb-revisions: closing dependent views')
     addView.close(()=>{
       if (close) {
-        console.log('calling orig close')
+        //console.log('calling orig close')
         close(cb) 
       } else cb()
     })
