@@ -26,9 +26,13 @@ function msg(key, revisionRoot, revisionBranch) {
   return ret
 }
 
-function fresh(cb) {
+function createDB(filename, cb) {
+  if (typeof filename == 'function') {
+    cb = filename
+    filename = null
+  }
   const db =  Flume(OffsetLog(
-    '/tmp/test-ssb-revisions-' + ts()+'/bla',
+    filename || '/tmp/test-ssb-revisions-' + ts()+'/bla',
     {blockSize: 1024, codec}
   ))
   
@@ -54,11 +58,11 @@ function fresh(cb) {
 
 function test(name, fn) {
   tape(name, t=>{
-    fresh( (err, db) => {
+    createDB( (err, db) => {
       if (err) throw err
       fn(t, db)
     })
   })
 }
 
-module.exports = {test, msg, rndKey}
+module.exports = {createDB, test, msg, rndKey}
