@@ -5,6 +5,7 @@ const CreateView = require('flumeview-level')
 const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
 const multicb = require('multicb')
+const debug = require('debug')('ssb-revisions')
 
 const getRange = require('./get_range')
 const Indexing = require('./indexing')
@@ -135,7 +136,7 @@ exports.init = function (ssb, config) {
   sv.updates = function(opts) {
     opts = opts || {}
     const oldSeq = opts.since !== undefined ? opts.since : -1
-    const limit = opts.limit || 10 // TODO
+    const limit = opts.limit || 512 // TODO
     let newSeq = -1
     let i = 0
     return next( ()=> { switch(i++) {
@@ -169,7 +170,7 @@ exports.init = function (ssb, config) {
               newSeq = oldSeq
               return deferred.resolve(pull.empty())
             }
-            console.log('from', oldSeq, 'to', newSeq)
+            debug('processing updates from %d to %d', oldSeq, newSeq)
             deferred.resolve(
               pull(
                 pull.values(revRoots),
@@ -198,7 +199,7 @@ exports.init = function (ssb, config) {
 
   sv.indexingSource = function(opts) {
     opts = opts || {}
-    console.log('called indexingSource', opts)
+    // console.log('called indexingSource', opts)
     let lastSince = opts.since
     let synced = false  
     return next( ()=> {
@@ -211,7 +212,7 @@ exports.init = function (ssb, config) {
               ended = end || ended
               if (ended) return cb(ended)
               if (sv.since.value > lastSince) return cb(true)
-              console.log('waiting ...')
+              debug('waiting ...')
               // wait for the next time 'since' is set
               sv.since.once( ()=> cb(true), false )
             }
@@ -223,7 +224,7 @@ exports.init = function (ssb, config) {
         sv.updates({since: lastSince}),
         pull.map( kvv => {
           if (kvv.since !== undefined) {
-            console.log('received since', kvv.since)
+            debug('received since %d', kvv.since)
             if (kvv.since == lastSince) {
               //console.log('synced!')
               synced = true
@@ -241,7 +242,7 @@ exports.init = function (ssb, config) {
 
   const addView = Indexing(ssb, _log, ssb.ready, sv.indexingSource)
   sv.use = function(name, createView) {
-    console.log('ssb-revisions.use', name)
+    debug('use %s', name)
     sv[name] = addView(name, createView)
 
     /*
@@ -262,7 +263,7 @@ exports.init = function (ssb, config) {
 
   const close = sv.close
   sv.close = function(cb) {
-    console.log('ssb-revisions: closing dependent views')
+    debug('closing dependent views')
     addView.close(()=>{
       if (close) {
         //console.log('calling orig close')
