@@ -10,7 +10,7 @@ const debug = require('debug')('ssb-revisions')
 const getRange = require('./get_range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
-const Branch = require('./indexes/branch')
+const Index = require('./indexes/generic')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -276,8 +276,17 @@ exports.init = function (ssb, config) {
   sv.use('Stats', Stats())
   sv.stats = sv.Stats.unwrapped.stream
 
-  sv.use('Branch', Branch())
-  sv.messagesByBranch = opts => sv.Branch.unwrapped.read(opts || {})
+  sv.use('BranchIndex', Index('branch'))
+  sv.messagesByBranch= (name, opts) => sv.BranchIndex.unwrapped.read(Object.assign({
+    gt: [name, null],
+    lt: [name, undefined]
+  }, opts || {}))
+
+  sv.use('TypeIndex', Index('type'))
+  sv.messagesByType = (name, opts) => sv.TypeIndex.unwrapped.read(Object.assign({
+    gt: [name, null],
+    lt: [name, undefined]
+  }, opts || {}))
 
   return sv
 }
