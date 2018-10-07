@@ -10,6 +10,7 @@ const debug = require('debug')('ssb-revisions')
 const getRange = require('./get_range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
+const Warnings = require('./indexes/warnings')
 const Index = require('./indexes/generic')
 
 exports.name = 'revisions'
@@ -20,6 +21,8 @@ exports.manifest = {
   heads: 'source',
   updates: 'source',
   stats: 'source',
+  warnings: 'source',
+  messagesByType: 'source',
   messagesByBranch: 'source'
 }
 
@@ -275,6 +278,9 @@ exports.init = function (ssb, config) {
 
   sv.use('Stats', Stats())
   sv.stats = sv.Stats.unwrapped.stream
+
+  sv.use('Warnings', Warnings())
+  sv.warnings = sv.Warnings.unwrapped.read
 
   sv.use('BranchIndex', Index('branch'))
   sv.messagesByBranch= (name, opts) => sv.BranchIndex.unwrapped.read(Object.assign({
