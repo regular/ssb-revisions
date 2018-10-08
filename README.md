@@ -1,7 +1,32 @@
 # ssb-revisions
 mutable documents for secure scuttlebutt
 
-EXPERIMENTAL, Work in Progress
+For many applications it is desirable to enable users to edit messages that already have been published. This ranges from being able to fix typos to collaboratively working on a collection of links or updating a TODO list. With mutable documents, the scuttlebutt protocol becomes attractive for a wider range of applications.
+
+Because we use an append-only log as the fundamental database, there is no real mutablility. What we can do however, is publishing updates to previously send messages, asking clients to display the updated version in place of the original message. ssb-revisions is an attempt of implementing a basic API that enables appications to use mutable messages simply by adding an sbot plugin.
+
+## A tree of revisions
+
+ssb-revisions uses the properties `revisionRoot` and `revisionBranch` of a message to form a tree similar to a git commit tree.
+You can overwrite a message's content by publishing a new message specifying the original message's id in both, revisionRoot and revisionBranch. In turn, you can overwrite this new revision you just made, by publishing a new message with revisionRoot pointing to the original message and revisionBranch to the last revision. This is analogue to how scuttlebutt's `root` and `branch` propterties work, but instead of answering to a previous message, revisionRoot and revisionBranch are being used to *edit* a previous message.
+
+## Forks
+
+If two messages refer to the same revisionBranch, they create a fork. These two edits are conflicting; it is unclear, which of the edits should represent the message's new value. The message has two *heads*. Just like in git, a merge is required to resolve this conflict. You can merge two revisions by publishing yet another revision with revisionBranch refering to *both* of the conflicting heads in an array.
+While a conflict is present, ssb-revisions breaks the tie by taking the revisions' timestamp into account. The newer revisions wins.
+
+## Incomplete History
+
+It is possible that messages that are referred to from other messages by revisionRoot or revisionBranch are not available in the log, becaue they are published by authors outside of the user's friend-of-friend bubble. Objects with revisions that contain such dangling references are said to have an "incomplete history".
+
+## Indexxing
+
+One of the challenges with mutable messages is indexing. Consider `messagesByType`. Let's say an application wants to render all messages of type `stylesheet` and live-update them whenever a new revision is published. Because there is no guarantee that the type property is not affected by an update, we cannot simpky assume that a message that was part of the result set at some point remains in it indefinitely. In contrast to traditional flumeviews, ssb-revision views (ssb-reviews for short) must deal with the fact that a messages is altered in such a way that it is no longer part of the query result.
+
+This problem is solved by calling a view's `map` function twice, once for the new value (as with flumeviews) and a second time for the previous/old value. The differnce between the two return values is used to determine which index entries are still valid on which one must be deleted from the index. In the above example, if a message of type styelsheet is revised and now no longer is a stylesheet, the live stream returnd by `ssb.revisions.messagesByType('stylesheet', {live: true})` will emit `{type: 'del', key: ['stylesheet', '%....']}` where '%...' is the revisionRoot (id of the original message) that no longer is part of the query result.
+
+You can use ssb-review-reduce and ssb-review-level to implement such views. They mostly work like flumeview-reduce and flumeview-level. See below for more.
+
 
 ## Installation
 
@@ -9,8 +34,9 @@ Make sure sbot is running, do
 
 `$ sbot plugins.install ssb-revisions`
 
-and restart sbot.
+and restart sbot. Check if things are working with:
 
+`$ sbot revisions.stats`
 
 ## API
 
@@ -20,18 +46,18 @@ get statistics
 
 ```
 {
-  forks: n,       // number of objects with mutliple heads
+  forked: n,       // number of objects with mutliple heads
   incomplete: n,  // number of objects with missing revisions
-  revisions: n    // total number of revisions
 }
 ```
 
-### `revisions.history(revisionRoot, {live, keys, values})`
+### `revisions.history(revisionRoot, {live, sync, keys, values})`
 
 get the history of a document/an object and optionally get live updates whenever it changes
 
 - options are
   - live: get live updates when a new revision is published
+  - sync: emit `{sync: true}` to separate old records and live data
   - keys: include keys in output (default: true)
   - values: 
     - false: do not include values
@@ -40,7 +66,7 @@ get the history of a document/an object and optionally get live updates whenever
 
 > **NOTE** revisions are streamed unordered. To sort them, use ssb-sort.
 
-### `revisions.heads(revisionRoot, {live, keys, values, meta, maxHeads})`
+### `revisions.heads(revisionRoot, {live, sync, keys, values, meta, maxHeads})`
 
 stream current heads of an object, most current head first.
 
@@ -61,9 +87,11 @@ stream current heads of an object, most current head first.
 
 - options are
   - live: stream live changes
+  - sync: emit `{sync: true}` to separate old records and live data
   - meta: include meta data (see below)
   - values: include values (default is false)
   - keys: include keys (default is true)
+  - maxHeads: limit number of returned heads
 
 > **NOTE** if there's just one key in the response object, the object collapses to that key's value.
 
@@ -88,4 +116,71 @@ $ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256"
   "%fXSWgOSZJQaX+Ouur0N+INMOfmatw3MwOFQR3NsjYAo=.sha256"
 ]
 
+$ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" -maxHeads 1
+"%9ET2dmQhx9oAnVp1UxWycp1siCR2fwR1XRiw9f2eIrU=.sha256",
+
 ```
+
+### `revisions.messagesByType(type, {live, sync, keys, values, seqs})`
+
+Get a (live) stream of objects of a certain type.
+
+> Because objects are mutable, their type may change. The stream will emit {type: 'del'} events if an object no longer is of the specifed tyoe.
+
+```
+{
+  key: [type, revisionRoot],  // leveldb key
+  seq:          // flumedb sequence
+  value: {
+    key:        // message key
+    value: {    // message value
+      author:
+      content:
+      ...
+    }
+  }
+}
+```
+
+- options are
+  - live: stream live changes
+  - sync: emit `{sync: true}` to separate old records and live data
+  - values: include message data (default is true)
+  - keys: include leveldb keys (default is true)
+  - seqs: include flumedb sequence numbers
+
+### `revisions.messagesByBranch(branch, {live, sync, keys, values, seqs})`
+
+Get a (live) stream of objects in a certain branch
+
+> Because objects are mutable, their branch  may change. The stream will emit {type: 'del'} events if an object no longer is in the specifed branch.
+
+```
+{
+  key: [branch, revisionRoot],  // leveldb key
+  seq:          // flumedb sequence
+  value: {
+    key:        // message key
+    value: {    // message value
+      author:
+      content:
+      ...
+    }
+  }
+}
+```
+
+- options are
+  - live: stream live changes
+  - sync: emit `{sync: true}` to separate old records and live data
+  - values: include message data (default is true)
+  - keys: include leveldb keys (default is true)
+  - seqs: include flumedb sequence numbers
+
+
+### `revisions.use(name, createView)`
+
+Add a view (indexer) to ssb-revisions. These views are similar to flumeviews but can deal with mutable messages too. (I call them "ssb-review" instead of flumeview). There are two "review" implementations: [ssb-review-reduce](https://github.com/regular/ssb-review-reduce) (similar to flumeview-reduce) and [ssb-review-level](https://github.com/regular/ssb-review-level) (similar to flumeview-level).
+
+
+
