@@ -27,7 +27,7 @@ One of the challenges with mutable messages is indexing. Consider `messagesByTyp
 
 This problem is solved by calling a view's `map` function twice, once for the new value (as with flumeviews) and a second time with the previous/old value. The differnce between the two return values is used to determine which index entries are still valid and which ones must be removed from the index. In the above example, if a message of type styelsheet is revised and now no longer is a stylesheet, the live stream returned by `ssb.revisions.messagesByType('stylesheet', {live: true})` will emit `{type: 'del', key: ['stylesheet', '%....']}` where '%...' is the revisionRoot (id of the original message) that no longer is part of the query result.
 
-You can use ssb-review-reduce and ssb-review-level to implement such views. They mostly work like flumeview-reduce and flumeview-level. Instead of using `ssb._flumeUse` you use `ssb.revisions.use` to register such views. See below for more.
+You can use [ssb-review-reduce](https://github.com/regular/ssb-review-reduce) and [ssb-review-level](https://github.com/regular/ssb-review-level) to implement such views. They mostly work like flumeview-reduce and flumeview-level. Instead of using `ssb._flumeUse` you use `ssb.revisions.use` to register such views. See below for more.
 
 
 ## Installation
