@@ -29,6 +29,16 @@ This problem is solved by calling a view's `map` function twice, once for the ne
 
 You can use [ssb-review-reduce](https://github.com/regular/ssb-review-reduce) and [ssb-review-level](https://github.com/regular/ssb-review-level) to implement such views. They mostly work like flumeview-reduce and flumeview-level. Instead of using `ssb._flumeUse` you use `ssb.revisions.use` to register such views. See below for more.
 
+### Indexing, behind the scenes
+
+Whenever a new revision is published, all revisions that have the same revisionRoot plus the original message (the message with the key that matches the revisionRoot) are retrieved from the log and sorted by causal order. There will be at least one member of the set that is not referred to by others via revisionBranch, these are the _heads_. If there is more than one head, the tie is broken using the messages timestamp: newer heads win.
+
+An index (or view) stores the last message sequence it has seen. When updating a view, it must be fed with all messages it has not seen upto the latest message in the log. When updating a view, we calculate the head at the time the view was last updated, by filtering the set of revisions down to those with sequence numbers lower or equal to the view's `since` value.
+
+We call the view's map function with this old value, to learn what entries it emitted for that document the last time it was updated. Then we calculate the head again, this time including all revisions we know about and call `map` again. The difference of the results of the two invocations of `map` tell us which entries must be deleted from the index. All other entries are updated (overwritten) to now point to the sequence number of the latest revision.
+
+As a result, it is trivial to implement application code that, for example, renders all documents of type 'stylesheet', updates the DOM whenever they change and removes them when they no longer are of that type. All you need is `ssb.revision.messagesByType('stylesheet', {live: true})`.
+
 
 ## Installation
 
