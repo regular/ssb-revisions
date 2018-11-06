@@ -15,6 +15,7 @@
     "ltgt": "^2.2.1",
     "multicb": "^1.2.2",
     "obv": "0.0.1",
+    "pull-cont": "^0.1.1",
     "pull-defer": "^0.2.3",
     "pull-looper": "^1.0.0",
     "pull-next": "^1.0.1",
