@@ -18,6 +18,8 @@
     "pull-defer": "^0.2.3",
     "pull-looper": "^1.0.0",
     "pull-next": "^1.0.1",
+    "ssb-review-level": "^3.0.5",
+    "ssb-review-reduce": "^1.4.0",
     "ssb-sort": "^1.1.0"
   },
   "devDependencies": {
