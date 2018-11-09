@@ -137,7 +137,7 @@ $ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" -m
 
 Get a (live) stream of objects of a certain type.
 
-> Because objects are mutable, their type may change. The stream will emit {type: 'del'} events if an object no longer is of the specifed tyoe.
+> Because objects are mutable, their type may change. The stream will emit {type: 'del'} events if an object no longer is of the specified type.
 
 ```
 {
