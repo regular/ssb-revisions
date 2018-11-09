@@ -26,7 +26,7 @@
   "devDependencies": {
     "flumecodec": "0.0.1",
     "flumedb": "^0.4.9",
-    "flumelog-offset": "^3.2.6",
+    "flumelog-offset": "^3.3.2",
     "tape": "^4.9.0"
   }
 }
