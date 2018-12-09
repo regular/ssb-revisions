@@ -21,9 +21,9 @@ It is possible that messages that are referred to from other messages by revisio
 
 I use the terms "document" and "object" here interchangeably to refer to the entire tree of revisions spwaning from a original message (the revisionRoot). An object's or document's value is the value of its latest head. 
 
-## Indexxing
+## Indexing
 
-One of the challenges with mutable messages is indexing. Consider `messagesByType`. Let's say an application wants to render all messages of type `stylesheet` and live-update them whenever a new revision is published. Because there is no guarantee that the type property is not affected by an update, we cannot simpky assume that a message that was part of the result set at some point remains in it indefinitely. In contrast to traditional flumeviews, ssb-revision views (ssb-reviews for short) must deal with the case that a messages might be altered in such a way that it is no longer part of the query result.
+One of the challenges with mutable messages is indexing. Consider `messagesByType`. Let's say an application wants to render all messages of type `stylesheet` and live-update them whenever a new revision is published. Because there is no guarantee that the type property is not affected by an update, we cannot simply assume that a message that was part of the result set at some point remains in it indefinitely. In contrast to traditional flumeviews, ssb-revision views (ssb-reviews for short) must deal with the case that a messages might be altered in such a way that it is no longer part of the query result.
 
 This problem is solved by calling a view's `map` function twice, once for the new value (as with flumeviews) and a second time with the previous/old value. The differnce between the two return values is used to determine which index entries are still valid and which ones must be removed from the index. In the above example, if a message of type styelsheet is revised and now no longer is a stylesheet, the live stream returned by `ssb.revisions.messagesByType('stylesheet', {live: true})` will emit `{type: 'del', key: ['stylesheet', '%....']}` where '%...' is the revisionRoot (id of the original message) that no longer is part of the query result.
 
@@ -58,7 +58,7 @@ get statistics
 
 ```
 {
-  forked: n,       // number of objects with mutliple heads
+  forked: n,       // number of objects with multiple heads
   incomplete: n,  // number of objects with missing revisions
 }
 ```
@@ -137,7 +137,7 @@ $ sbot revisions.heads "%kOMB4XM/5//b/fGtBcqIV3kbv5bERiTZWd4dkBWEQSs=.sha256" -m
 
 Get a (live) stream of objects of a certain type.
 
-> Because objects are mutable, their type may change. The stream will emit {type: 'del'} events if an object no longer is of the specifed tyoe.
+> Because objects are mutable, their type may change. The stream will emit {type: 'del'} events if an object no longer is of the specified type.
 
 ```
 {
