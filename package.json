@@ -1,6 +1,6 @@
 {
   "name": "ssb-revisions",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "mutable documents for secure scuttlebutt",
   "main": "index.js",
   "scripts": {
@@ -36,7 +36,10 @@
     "type": "git",
     "url": "git+https://github.com/regular/ssb-revisions.git"
   },
-  "keywords": ["ssb", "flumedb"],
+  "keywords": [
+    "ssb",
+    "flumedb"
+  ],
   "bugs": {
     "url": "https://github.com/regular/ssb-revisions/issues"
   },
