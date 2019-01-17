@@ -18,7 +18,7 @@ exports.version = require('./package.json').version
 exports.manifest = {
   close: 'async',
   get: 'async',
-  getLatest: 'async',
+  getLatestRevision: 'async',
   history: 'source',
   heads: 'source',
   updates: 'source',
@@ -99,6 +99,43 @@ exports.init = function (ssb, config) {
          cb(new Error('invalid options'))
       })
     )
+  }
+
+  // key may be original or revision
+  // returns kv
+  sv.getLatestRevision = function(key, cb) {
+    sv.get(key, {meta: true, values: true}, (err, kv) => {
+      if (err) return cb(err)
+      kv.key = key
+      if (!kv.meta.original) {
+        // it's a revision
+        return cb(null, kv)
+      }
+      pull(
+        sv.heads(key, {
+          keys: true,
+          values: true,
+          //seqs: true,
+          meta: true,
+          maxHeads: 1
+        }),
+        pull.collect((err, items) => {
+          if (err) return cb(err)
+          if (!items.length) return cb(new Error(`key not found: ${key}`))
+          const head = items[0].heads[0]
+          cb(null, {
+            key: head.key, 
+            value: head.value, 
+            //seq: head.seq, 
+            meta: Object.assign(
+              kv.meta, {
+                original: head.key == key,
+              }, items[0].meta
+            )
+          })
+        })
+      )
+    })
   }
 
 
