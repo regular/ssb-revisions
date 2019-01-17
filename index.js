@@ -2,12 +2,12 @@ const pull = require('pull-stream')
 const defer = require('pull-defer')
 const next = require('pull-next')
 const CreateView = require('flumeview-level')
-const ssbsort = require('ssb-sort')
 const ltgt = require('ltgt')
 const multicb = require('multicb')
 const debug = require('debug')('ssb-revisions')
 
-const getRange = require('./get_range')
+const heads = require('./find-heads')
+const getRange = require('./get-range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
 const Warnings = require('./indexes/warnings')
@@ -17,6 +17,8 @@ exports.name = 'revisions'
 exports.version = require('./package.json').version
 exports.manifest = {
   close: 'async',
+  get: 'async',
+  getLatest: 'async',
   history: 'source',
   heads: 'source',
   updates: 'source',
@@ -26,7 +28,7 @@ exports.manifest = {
   messagesByBranch: 'source'
 }
 
-const IDXVER=5
+const IDXVER = 6
 
 exports.init = function (ssb, config) {
   let _log
@@ -35,13 +37,67 @@ exports.init = function (ssb, config) {
     const c = kv.value && kv.value.content
     const revisionRoot = c && c.revisionRoot || kv.key
     //console.log('MAP', seq, revisionRoot)
-    return [['RS', revisionRoot, seq], ['SR', seq, revisionRoot]]
+    return [
+      ['RS', revisionRoot, seq],
+      ['SR', seq, revisionRoot],
+      // [B]ranch or [R]oot?
+      ['BR', kv.key, isUpdate(kv) ? 'B':'R']
+    ]
   })
 
   const sv = ssb._flumeUse('revisions', (log, name) => {
     _log = log
     return createView(log, name)
   })
+
+  // key can be a revRoot or a revision
+  // the difference to ssb.get() is that
+  // it won't callback until the key is found,
+  // hoping that gossipping will make it available
+  // eventually
+  sv.get = function(key, opts, cb) {
+    if (typeof opts == 'function') {
+      cb = opts
+      opts = {}
+    }
+    const meta = {old: false}
+    pull(
+      sv.read({
+        live: true,
+        sync: true,
+        values: opts.values !== false,
+        gt: ['BR', key],
+        lt: ['BR', key, undefined]
+      }),
+      pull.filter( kkv => {
+        if (kkv.sync) {
+          if (meta.type) {
+            // we knew this before sync
+            meta.old = true
+          }
+          return false
+        }
+        const [_, __, type] = kkv.key
+        meta.type = type
+        return true
+      }),
+      pull.take(1),
+      pull.collect( (err, results) => {
+        if (err) return cb(err)
+        const {key, value} = results[0]
+        if (opts.meta && opts.values) {
+          return cb(null, {meta, value: value.value})
+        }
+        if (opts.meta) {
+          return cb(null, meta)
+        }
+        if (opts.values) {
+          return cb(null, value.value)
+        }
+         cb(new Error('invalid options'))
+      })
+    )
+  }
 
 
   sv.history = function(revRoot, opts) {
@@ -71,7 +127,7 @@ exports.init = function (ssb, config) {
 
   sv.heads = function(revRoot, opts) {
     opts = opts || {}
-    const {live, sync} = opts
+    const {live, sync, allowAllAuthors} = opts
     const revisions = []
     let synced = false
     const state = {}
@@ -93,10 +149,14 @@ exports.init = function (ssb, config) {
           return sync ? [state, kv] : [state]
         }
         revisions.push(kv)
-        state.heads = heads(revRoot, revisions) 
-        if (meta) {
+        if (!meta) {
+          state.heads = heads(revRoot, revisions, {allowAllAuthors}) 
+        } else {
+          const result = heads(revRoot, revisions, {allowAllAuthors, meta: true}) 
+          state.heads = result.heads
           meta.forked = state.heads.length > 1
-          meta.incomplete = incomplete(revisions, revRoot)
+          meta.incomplete = result.meta.incomplete
+          meta.change_requests = result.meta.change_requests
         }
         return !live || (live && synced) ? [state] : null
       }),
@@ -180,6 +240,8 @@ exports.init = function (ssb, config) {
                 pull.values(revRoots),
                 pull.asyncMap( (revRoot, cb) => {
                   const done = multicb({pluck: 1})
+                  // TODO: getValueAt takes edits by all authors into account
+                  // this needs to be change to support change requests
                   getValueAt(sv, revRoot, oldSeq, done())
                   getValueAt(sv, revRoot, newSeq, done())
 
@@ -307,7 +369,8 @@ function getValueAt(sv, revRoot, at, cb) {
       values: true,
       seqs: true,
       meta: true,
-      maxHeads: 1
+      maxHeads: 1,
+      allowAllAuthors: true
     }),
     pull.collect((err, items) => {
       if (err) return cb(err)
@@ -345,45 +408,6 @@ function filterRepeated(f) {
 function ary(x) {
   if (x==undefined || x==null) return []
   return Array.isArray(x) ? x : [x]
-}
-
-function incomplete(msgs, revRoot) {
-  const revs = msgs.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
-  for(let m of msgs) {
-    for(let b of ary(m.value.content.revisionBranch)) {
-      if (!revs[b]) return true
-    }
-  }
-  return false
-}
-
-function heads(revisionRoot, revisions) {
-  const strippedRevs = revisions.map( kv => {
-    const {revisionRoot, revisionBranch} = kv.value.content
-    return {
-      key: kv.key,
-      value: {
-        timestamp: kv.value.timestamp,
-        content: {
-          revisionRoot,
-          revisionBranch
-        }
-      }
-    }
-  })
-
-  const hds = ssbsort.heads(strippedRevs)
-  const revs = revisions.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
-  return hds.map( k => revs[k] ).sort(compare)
-}
-
-function compare(a, b) {
-  return (
-    //declared timestamp, may by incorrect or a lie
-    (b.value.timestamp - a.value.timestamp) ||
-    //finially, sort hashes lexiegraphically.
-    (a.key > b.key ? -1 : a.key < b.key ? 1 : 0)
-  )
 }
 
 function toMsg(revisionRoot) {

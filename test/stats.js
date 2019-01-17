@@ -89,23 +89,23 @@ test('getStats() / stremStats() (slow updates)', (t, db) => {
         // initial
         {incomplete: 0, forked: 0},
         [ // A1
-          {forked: false, incomplete: true},
+          {forked: false, incomplete: true, change_requests: 0},
           null
         ],
         [ // A
-          {forked: false, incomplete: false},
-          {forked: false, incomplete: true}
+          {forked: false, incomplete: false, change_requests: 0},
+          {forked: false, incomplete: true, change_requests: 0}
         ],
         [ // A2
-          {forked: true, incomplete: false},
-          {forked: false, incomplete: false}
+          {forked: true, incomplete: false, change_requests: 0},
+          {forked: false, incomplete: false, change_requests: 0}
         ],
         [ // B2
-          {forked: false, incomplete: true},
+          {forked: false, incomplete: true, change_requests: 0},
           null
         ],
         [ // C2
-          {forked: false, incomplete: true},
+          {forked: false, incomplete: true, change_requests: 0},
           null
         ]
       ], 'stats map output')
