@@ -60,25 +60,27 @@ exports.init = function (ssb, config) {
       cb = opts
       opts = {}
     }
-    const meta = {old: false}
+    opts.values = opts.values !== false
+    const meta = {old: true}
+    let type
     pull(
       sv.read({
         live: true,
         sync: true,
-        values: opts.values !== false,
+        values: true, // if this is not true, I get {key: undefined, value: undefined} (??)
+        keys: true,
         gt: ['BR', key],
         lt: ['BR', key, undefined]
       }),
       pull.filter( kkv => {
         if (kkv.sync) {
-          if (meta.type) {
-            // we knew this before sync
-            meta.old = true
-          }
+          meta.old = false
           return false
         }
-        const [_, __, type] = kkv.key
-        meta.type = type
+        const indexKey = kkv.key
+        const [_, __, t] = indexKey
+        type = t
+        meta.original = t == 'R'
         return true
       }),
       pull.take(1),
