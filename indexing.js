@@ -39,7 +39,7 @@ module.exports = function(db, log, ready, createStream) {
             sv.createSink(function (err) {
               if (db.closed !== true) {
                 if(err) {
-                  console.error('error from sink:', err.message)
+                  //console.error('error from sink:', err.message)
                   if (err !== true && err.message !== 'aborted') console.error(explain(err, 'view stream error'))
                 }
                 sv.since.once(build)
