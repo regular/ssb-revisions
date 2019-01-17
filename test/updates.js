@@ -37,7 +37,8 @@ test('updates (single)', (t, db) => {
               seq: seqs[0],
               meta: {
                 forked: false,
-                incomplete: false
+                incomplete: false,
+                change_requests: 0
               },
             },
             old_value: null,
@@ -74,7 +75,11 @@ test('updates {since: 0}', (t, db) => {
               key: b.key,
               value: b.value,
               seq: seqs[1],
-              meta: {forked: false, incomplete: false},
+              meta: {
+                forked: false,
+                incomplete: false,
+                change_requests: 0
+              },
             },
             old_value: null
           })
@@ -110,13 +115,21 @@ test('updates (old value)', (t, db) => {
               key: b.key,
               value: b.value,
               seq: seqs[1],
-              meta: {forked: false, incomplete: false},
+              meta: {
+                forked: false,
+                incomplete: false,
+                change_requests: 0
+              },
             },
             old_value: {
               key: a.key,
               value: a.value,
               seq: seqs[0],
-              meta: {forked: false, incomplete: false},
+              meta: {
+                forked: false,
+                incomplete: false,
+                change_requests: 0
+              },
             }
           })
           t.deepEquals(items[1], {
@@ -155,13 +168,21 @@ test('updates (meta)', (t, db) => {
               key: d.key,
               value: d.value,
               seq: seqs[3],
-              meta: {forked: false, incomplete: false},
+              meta: {
+                forked: false, 
+                incomplete: false,
+                change_requests: 0
+              },
             },
             old_value: {
               key: c.key,
               value: c.value,
               seq: seqs[2],
-              meta: {forked: true, incomplete: false},
+              meta: {
+                forked: true,
+                incomplete: false,
+                change_requests: 0 
+              },
             }
           })
           t.deepEquals(items[1], {

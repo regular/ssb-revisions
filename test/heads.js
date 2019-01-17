@@ -68,7 +68,8 @@ test('heads: formats', (t, db) => {
             t.notOk(err, 'no error')
             t.deepEquals(items[0], {
               incomplete: false,
-              forked: false
+              forked: false,
+              change_requests: 0
             })
             cb(null)
           })
@@ -100,10 +101,13 @@ test('heads: ranges', (t, db) => {
     pull(
       pull.once('hello'),
 
-      // look at a only
+      // look at `b` only
       pull.asyncMap( (_, cb) => {
         pull(
-          db.revisions.heads(keyA, {meta: true, lt: seqs[1]}),
+          db.revisions.heads(keyA, {meta: true, lt: seqs[1],
+            allowAllAuthors: true // otherwise has trouble because it can't find the original author
+            // TODO: maybe add `ops.editors` ?
+          }),
           pull.collect( (err, items) => {
             console.log('items', items)
             t.notOk(err, 'no error')
@@ -231,6 +235,53 @@ test('heads({meta: true}) forks', (t, db) => {
               t.equals(items.length, 1)
               t.deepEquals(items[0].heads, [d], 'D is new head')
               t.notOk(items[0].meta.forked, 'meta indicates no fork')
+              db.close( ()=>{t.end()} )
+            })
+          )
+        })
+      })
+    )
+  })
+})
+
+function authorMsg(author, ...args) {
+  const m = msg(...args)
+  m.value.author = author
+  return m
+}
+
+test('heads({meta: true}) forks, multiple authors', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+
+  const a = authorMsg('alice', keyA)
+  const b = authorMsg('alice', keyB, keyA, [keyA])
+  const c = authorMsg('bob', keyC, keyA, [keyA]) // fork (alas bob is ignored)
+  const d = authorMsg('alice', keyD, keyA, [keyB, keyC]) // merge
+
+  db.append([a, b, c], err => {
+    if (err) throw err
+    pull(
+      db.revisions.heads(keyA, {meta: true}),
+      pull.collect( (err, items) => {
+        t.notOk(err, 'no error')
+        t.equals(items.length, 1)
+        t.deepEquals(items[0].heads, [b], 'bob is ignored')
+        t.equals(items[0].meta.forked, false, 'meta does not indicates a fork')
+        t.equals(items[0].meta.change_requests, 1, 'meta.change_requests == 1')
+
+        db.append(d, err =>{
+          if (err) throw err
+          pull(
+            db.revisions.heads(keyA, {meta: true}),
+            pull.collect( (err, items) => {
+              t.notOk(err, 'no error')
+              t.equals(items.length, 1)
+              t.deepEquals(items[0].heads, [d], 'D is new head')
+              t.notOk(items[0].meta.forked, 'meta indicates no fork')
+              t.equals(items[0].meta.change_requests, 0, 'meta.change_requests == 0')
               db.close( ()=>{t.end()} )
             })
           )
