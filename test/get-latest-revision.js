@@ -94,3 +94,64 @@ test('old and new message wtth and without revisions', (t, db) => {
     })
   })
 })
+
+function authorMsg(author, ...args) {
+  const m = msg(...args)
+  m.value.author = author
+  return m
+}
+
+test('revisions by different authros', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const a = authorMsg('alice', keyA)
+  const b = authorMsg('alice', keyB, keyA, [keyA])
+  const c = authorMsg('bob', keyC, keyA, [keyB])
+  
+  const done = multicb({pluck: 1, spread: true})
+  const done1 = done()
+  const done2 = done()
+  const done3 = done()
+
+  done( err => {
+    t.error(err)
+    db.close( ()=> t.end())
+  })
+
+  db.append(a, (err, data) => {
+    t.error(err)
+
+    db.append(b, err => {
+      t.error(err)
+
+      db.revisions.getLatestRevision(keyC, (err, kv) => {
+        t.error(err, 'no error')
+        t.equal(kv.key, keyC, 'key c, because we explicitly asked for it')
+        t.deepEqual(kv.value, c.value, 'value c')
+        t.equal(kv.meta.original, false, 'not original')
+        done1(err)
+      })
+
+      db.append(c, err => {
+        t.error(err)
+
+        db.revisions.getLatestRevision(keyA, {allowAllAuthors: true}, (err, kv) => {
+          t.error(err, 'no error')
+          t.equal(kv.key, keyC, 'key c, because we allow all authors')
+          t.deepEqual(kv.value, c.value, 'value c')
+          done2(err)
+        })
+
+        db.revisions.getLatestRevision(keyA, (err, kv) => {
+          t.error(err, 'no error')
+          t.equal(kv.key, keyB, 'key b, because c has a different author')
+          t.deepEqual(kv.value, b.value, 'value b')
+          t.equal(kv.meta.change_requests, 1, '1 change request')
+          done3(err)
+        })
+
+      })
+    })
+  })
+})

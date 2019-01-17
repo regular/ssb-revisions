@@ -63,6 +63,62 @@ get statistics
 }
 ```
 
+### `revisions.get(key, {values, meta}, cb)`
+
+get original or message by key. `key` can be a revRoot or a revision.
+
+The difference to `ssb.get()` is that it won't callback until the key is found,
+hoping that gossipping will make it available eventually. If you don't want to wait, just
+use `ssb.get`.
+
+```
+{
+  meta: {
+    original: bool, // original or revision?
+    old: bool,  // did it exist when we called or did we wait for it?
+  },
+  value: {
+    content: ...
+  }
+}
+```
+
+- options are
+  - values: 
+    - false: do not include value
+    - true: (default) include complete value
+  - meta:
+    - false: (default) don't include meta data
+    - true: include meta data in result
+
+### `revisions.getLatestRevision(key, {allowAllAuthors}, cb)`
+
+If key belongs to an original message, gets the latest revision of that object/document.
+If instead key is the id of a revision, gets that specific revision.
+Like `get()` it won't callback until the message was found, hoping it will
+eventually show up.
+
+```
+{
+  key: // key of the latest revision
+  meta: {
+    original: bool, // original or revision?
+    old: bool,  // did it exist when we called or did we wait for it?
+    forked: bool,
+    incomplete: bool,
+    change_requests: n
+  },
+  value: {
+    content: ...
+  }
+}
+```
+
+- options are
+  - allowAllAuthors:
+    - true: include revisions by all authors
+    - false: (default) ignore revisions by authors other than the original author
+
 ### `revisions.history(revisionRoot, {live, sync, keys, values})`
 
 get the history of a document/an object and optionally get live updates whenever it changes

@@ -103,7 +103,11 @@ exports.init = function (ssb, config) {
 
   // key may be original or revision
   // returns kv
-  sv.getLatestRevision = function(key, cb) {
+  sv.getLatestRevision = function(key, opts, cb) {
+    if (typeof opts == 'function') {
+      cb = opts
+      opts = {}
+    }
     sv.get(key, {meta: true, values: true}, (err, kv) => {
       if (err) return cb(err)
       kv.key = key
@@ -116,6 +120,7 @@ exports.init = function (ssb, config) {
           keys: true,
           values: true,
           //seqs: true,
+          allowAllAuthors: opts.allowAllAuthors,
           meta: true,
           maxHeads: 1
         }),
@@ -137,7 +142,6 @@ exports.init = function (ssb, config) {
       )
     })
   }
-
 
   sv.history = function(revRoot, opts) {
     opts = opts || {}
