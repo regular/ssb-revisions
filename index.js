@@ -88,7 +88,7 @@ exports.init = function (ssb, config) {
         if (err) return cb(err)
         const {key, value} = results[0]
         if (opts.meta && opts.values) {
-          return cb(null, {meta, value: value.value})
+          return cb(null, {key, meta, value: value.value})
         }
         if (opts.meta) {
           return cb(null, meta)
