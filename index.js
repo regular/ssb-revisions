@@ -86,7 +86,7 @@ exports.init = function (ssb, config) {
       pull.take(1),
       pull.collect( (err, results) => {
         if (err) return cb(err)
-        const {key, value} = results[0]
+        const {value} = results[0]
         if (opts.meta && opts.values) {
           return cb(null, {key, meta, value: value.value})
         }

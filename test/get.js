@@ -29,6 +29,7 @@ test('old and new message wtth and without revisions', (t, db) => {
     t.error(err, 'no error')
     t.deepEqual(kv.value, a.value, 'value')
     t.equal(kv.meta.old, false, 'not old')
+    t.equal(kv.key, keyA, 'has key')
     done2(err)
   })
 
