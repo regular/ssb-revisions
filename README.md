@@ -246,6 +246,46 @@ Get a (live) stream of objects in a certain branch
   - seqs: include flumedb sequence numbers
 
 
+### `revisions.links({to, rel, live, sync, keys, values, seqs})`
+
+Get a (live) stream of links of a certain relation or to a certain object (or both)
+
+> Because objects are mutable, their links  may change. The stream will emit {type: 'del'} events if an object no longer is in the specifed result set.
+
+```
+{
+  key: [reltion, to, revisionRoot],  // leveldb key
+  seq:          // flumedb sequence
+  value: {
+    key:        // message key
+    value: {    // message value
+      author:
+      content:
+      ...
+    }
+  }
+}
+```
+
+- options are
+  - to: message, feed or blob id (or a sigil, like &, % or @)
+  - rel: the name of the property (aka relation). Can be a dot-separated property path
+  - live: stream live changes
+  - sync: emit `{sync: true}` to separate old records and live data
+  - values: include message data (default is true)
+  - keys: include leveldb keys (default is true)
+  - seqs: include flumedb sequence numbers
+
+Example:
+
+``` js
+  // get a live-updating collection of all blobs referred to by {image: {blob: xxx}} in any object
+  pull(
+    ssb.revisions.links({to: '&', rel: 'image.blob', live: true),
+    collectMutations(...)
+  )
+```
+
 ### `revisions.use(name, createView)`
 
 Add a view (indexer) to ssb-revisions. These views are similar to flumeviews but can deal with mutable messages too. (I call them "ssb-review" instead of flumeview). There are two "review" implementations: [ssb-review-reduce](https://github.com/regular/ssb-review-reduce) (similar to flumeview-reduce) and [ssb-review-level](https://github.com/regular/ssb-review-level) (similar to flumeview-level).

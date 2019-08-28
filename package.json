@@ -19,9 +19,11 @@
     "pull-defer": "^0.2.3",
     "pull-looper": "^1.0.0",
     "pull-next": "^1.0.1",
+    "ssb-ref": "^2.13.9",
     "ssb-review-level": "^3.0.5",
     "ssb-review-reduce": "^1.4.0",
-    "ssb-sort": "^1.1.0"
+    "ssb-sort": "^1.1.0",
+    "traverse": "^0.6.6"
   },
   "devDependencies": {
     "flumecodec": "0.0.1",

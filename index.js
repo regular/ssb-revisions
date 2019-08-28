@@ -12,6 +12,7 @@ const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
 const Warnings = require('./indexes/warnings')
 const Index = require('./indexes/generic')
+const Links = require('./indexes/links')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -25,7 +26,8 @@ exports.manifest = {
   stats: 'source',
   warnings: 'source',
   messagesByType: 'source',
-  messagesByBranch: 'source'
+  messagesByBranch: 'source',
+  links: 'source'
 }
 
 const IDXVER = 6
@@ -398,6 +400,43 @@ exports.init = function (ssb, config) {
     gt: [name, null],
     lt: [name, undefined]
   }, opts || {}))
+
+  sv.use('LinkIndex', Links())
+  sv.links = opts => {
+    opts = opts || {}
+    let o, m
+    if (opts.to && opts.rel) {
+      o = {
+        gt: ['R', opts.rel, opts.to, null], 
+        lt: ['R', opts.rel, opts.to + '~', undefined]
+      }
+      m = ([_, rel, to, revroot]) => [rel, to, revroot]
+    } else if (opts.rel) {
+      o = {
+        gt: ['R', opts.rel, null, null], 
+        lt: ['R', opts.rel, undefined, undefined]
+      }
+      m = ([_, rel, to, revroot]) => [rel, to, revroot]
+    } else if (opts.to) {
+      o = {
+        gt: ['T', opts.to, null], 
+        lt: ['T', opts.to + '~', undefined]
+      }
+      m = ([_, to, rel, revroot]) => [rel, to, revroot]
+    } else {
+      o = {
+        gt: ['T', null, null], 
+        lt: ['T', undefined, undefined]
+      }
+      m = ([_, to, rel, revroot]) => [rel, to, revroot]
+    }
+    return pull(
+      sv.LinkIndex.unwrapped.read(Object.assign(o, opts || {})),
+      pull.through(kv => {
+        if (kv.key) kv.key = m(kv.key)
+      })
+    )
+  }
 
   return sv
 }
