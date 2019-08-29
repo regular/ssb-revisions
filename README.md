@@ -254,7 +254,7 @@ Get a (live) stream of links of a certain relation or to a certain object (or bo
 
 ```
 {
-  key: [reltion, to, revisionRoot],  // leveldb key
+  key: [relation, to, revisionRoot],  // leveldb key
   seq:          // flumedb sequence
   value: {
     key:        // message key
