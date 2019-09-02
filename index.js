@@ -384,19 +384,19 @@ exports.init = function (ssb, config) {
   }
 
   sv.use('Stats', Stats())
-  sv.stats = sv.Stats.unwrapped.stream
+  sv.stats = sv.Stats.stream
 
   sv.use('Warnings', Warnings())
-  sv.warnings = sv.Warnings.unwrapped.read
+  sv.warnings = sv.Warnings.read
 
   sv.use('BranchIndex', Index('branch'))
-  sv.messagesByBranch= (name, opts) => sv.BranchIndex.unwrapped.read(Object.assign({
+  sv.messagesByBranch= (name, opts) => sv.BranchIndex.read(Object.assign({
     gt: [name, null],
     lt: [name, undefined]
   }, opts || {}))
 
   sv.use('TypeIndex', Index('type'))
-  sv.messagesByType = (name, opts) => sv.TypeIndex.unwrapped.read(Object.assign({
+  sv.messagesByType = (name, opts) => sv.TypeIndex.read(Object.assign({
     gt: [name, null],
     lt: [name, undefined]
   }, opts || {}))
@@ -431,7 +431,7 @@ exports.init = function (ssb, config) {
       m = ([_, to, rel, revroot]) => [rel, to, revroot]
     }
     return pull(
-      sv.LinkIndex.unwrapped.read(Object.assign(o, opts || {})),
+      sv.LinkIndex.read(Object.assign(o, opts || {})),
       pull.through(kv => {
         if (kv.key) kv.key = m(kv.key)
       })

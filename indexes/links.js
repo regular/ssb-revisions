@@ -1,10 +1,12 @@
 const {isMsgId, isBlobId, isFeedId} = require('ssb-ref')
 const traverse = require('traverse')
 const Index = require('ssb-review-level')
+const debug = require('debug')('ssb-revisions:links')
  
-module.exports = function(prop) {
+module.exports = function() {
   return Index(1, function map (kv) {
     const {key, value} = kv
+    debug('mapping %s', key)
     let content = value && value.content || {}
 
     const revisionRoot = (value && value.content && value.content.revisionRoot) || key
@@ -20,8 +22,10 @@ module.exports = function(prop) {
       return acc
     }, [])
 
-    return links.map(([rel, x]) => ['T', x, rel, revisionRoot]).concat(
-           links.map(([rel, x]) => ['R', rel, x, revisionRoot])
+    const ret = links.map(([rel, x]) => ['T', x, rel, revisionRoot]).concat(
+                links.map(([rel, x]) => ['R', rel, x, revisionRoot])
     )
+    debug('return %O', ret)
+    return ret
   })
 }

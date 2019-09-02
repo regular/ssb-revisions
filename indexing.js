@@ -22,7 +22,9 @@ module.exports = function(db, log, ready, createStream) {
     meta[name] = views[name].meta
 
     sv.since.once(function build (upto) {
+      debug('build: sv.since %d', upto)
       log.since.once(function (since) {
+        debug('build: log.since %d', upto)
         if(upto > since) {
           console.log('destroying', name)
           sv.destroy(function () { build(-1) })
@@ -31,7 +33,7 @@ module.exports = function(db, log, ready, createStream) {
           if (upto !== -1 && upto !== null) opts.since = upto // TODO: call it gt?
           if (upto == -1) opts.cache = false
 
-          //console.log('Indexing opts are:', JSON.stringify(opts))
+          debug('Indexing opts are: %s', JSON.stringify(opts))
 
           pull(
             createStream(opts),
