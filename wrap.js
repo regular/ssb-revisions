@@ -1,32 +1,51 @@
 var PullCont = require('pull-cont')
 var pull = require('pull-stream')
+const debug = require('debug')('wrap')
+debug("WRAP")
 
-module.exports = function wrap(sv, since, isReady) {
+module.exports = function wrap(sv, logSince, masterSince, isReady) {
   var waiting = []
 
   var meta = {}
+  let db_ready = isReady()
+
+  if (!db_ready) checkReady()
 
   sv.since(function (upto) {
-    if(!isReady.value) return
-    while(waiting.length && waiting[0].seq <= upto)
+    if(!db_ready) return
+    debug('view reached %d', upto)
+    while(waiting.length && waiting[0].seq <= upto) {
+      debug('  calling queued cb %d', waiting[0].seq)
       waiting.shift().cb()
+    }
   })
 
-  isReady(function (ready) {
-    if(!ready) return
+  /* secure-scuttlebot replaces flumedb's ready observable
+   * with a simple getter. That's why we poll here :(
+   */
+  function checkReady() {
+    db_ready = isReady()
+    if(!db_ready) {
+      debug('ssb not ready.')
+      setTimeout(checkReady, 100)
+      return
+    }
     var upto = sv.since.value
+    debug('database ready, view reached %d', upto)
     if(upto == undefined) return
-    while(waiting.length && waiting[0].seq <= upto)
+    while(waiting.length && waiting[0].seq <= upto) {
+      debug('  calling queued cb %d', waiting[0].seq)
       waiting.shift().cb()
-  })
+    }
+  }
 
-  function ready (cb) {
-    if(isReady.value && since.value != null && since.value === sv.since.value) cb()
-    else
-      since.once(function (upto) {
-        if(isReady.value && upto === sv.since.value) cb()
-        else waiting.push({seq: upto, cb: cb})
-      })
+  function ready(cb) {
+    if(db_ready && logSince.value != null && logSince.value === sv.since.value) {
+      debug('Calling method immediately, logSince=%d', logSince.value)
+      return cb()
+    }
+    debug('queuing method call for seq %d, sv is at %d, db ready: %b.', logSince.value, sv.since.value, db_ready)
+    waiting.push({seq: logSince.value, cb})
   }
 
   var wrapper = {

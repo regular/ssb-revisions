@@ -351,7 +351,7 @@ exports.init = function (ssb, config) {
     })
   }
 
-  const addView = Indexing(ssb, _log, ssb.ready, sv.indexingSource)
+  const addView = Indexing(ssb, _log, ssb.ready, sv.since, sv.indexingSource)
   sv.use = function(name, createView) {
     debug('use %s', name)
     sv[name] = addView(name, createView)

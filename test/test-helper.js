@@ -38,7 +38,7 @@ function createDB(filename, cb) {
   
   let done = false
   Revisions.init({
-    ready: db.ready,
+    ready: ()=> db.ready.value, // this is what secure-scuttlebot turns the obv into, unfortunately
     get: db.get,
     _flumeUse: (name, view) => {
       db.use(name, view)

@@ -6,7 +6,7 @@ const pull = require('pull-stream')
 const explain = require('explain-error')
 const multicb = require('multicb')
 
-module.exports = function(db, log, ready, createStream) {
+module.exports = function(db, log, ready, masterSince, createStream) {
   const views = {}
   const meta = {}
 
@@ -17,7 +17,7 @@ module.exports = function(db, log, ready, createStream) {
 
     var sv = createView(log, name)
 
-    views[name] = wrap(sv, log.since, ready)
+    views[name] = wrap(sv, log.since, masterSince, ready)
     views[name].unwrapped = sv
     meta[name] = views[name].meta
 
