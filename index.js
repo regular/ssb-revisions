@@ -3,16 +3,16 @@ const defer = require('pull-defer')
 const next = require('pull-next')
 const CreateView = require('flumeview-level')
 const ltgt = require('ltgt')
-const multicb = require('multicb')
 const debug = require('debug')('ssb-revisions')
 
-const heads = require('./find-heads')
+const findHeads = require('./find-heads')
 const getRange = require('./get-range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
 const Warnings = require('./indexes/warnings')
 const Index = require('./indexes/generic')
 const Links = require('./indexes/links')
+const validatedPastAndPresentValues = require('./validate')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -122,6 +122,7 @@ exports.init = function (ssb, config) {
           keys: true,
           values: true,
           //seqs: true,
+          validator: opts.validator,
           allowAllAuthors: opts.allowAllAuthors,
           meta: true,
           maxHeads: 1
@@ -172,7 +173,7 @@ exports.init = function (ssb, config) {
 
   api.heads = function(revRoot, opts) {
     opts = opts || {}
-    const {live, sync, allowAllAuthors} = opts
+    const {live, sync, allowAllAuthors, validator} = opts
     const revisions = []
     let synced = false
     const state = {}
@@ -195,9 +196,9 @@ exports.init = function (ssb, config) {
         }
         revisions.push(kv)
         if (!meta) {
-          state.heads = heads(revRoot, revisions, {allowAllAuthors}) 
+          state.heads = findHeads(revRoot, revisions, {allowAllAuthors, validator}) 
         } else {
-          const result = heads(revRoot, revisions, {allowAllAuthors, meta: true}) 
+          const result = findHeads(revRoot, revisions, {allowAllAuthors, validator, meta: true}) 
           state.heads = result.heads
           meta.forked = state.heads.length > 1
           meta.incomplete = result.meta.incomplete
@@ -246,6 +247,7 @@ exports.init = function (ssb, config) {
     opts = opts || {}
     const oldSeq = opts.since !== undefined ? opts.since : -1
     const limit = opts.limit || 512 // TODO
+    const validator = opts.validator
     let newSeq = -1
     let i = 0
     return next( ()=> { switch(i++) {
@@ -281,25 +283,7 @@ exports.init = function (ssb, config) {
             }
             debug('processing updates from %d to %d', oldSeq, newSeq)
             deferred.resolve(
-              pull(
-                pull.values(revRoots),
-                pull.asyncMap( (revRoot, cb) => {
-                  const done = multicb({pluck: 1})
-                  // TODO: getValueAt takes edits by all authors into account
-                  // this needs to be changed to support change requests
-                  getValueAt(api, revRoot, oldSeq, done())
-                  getValueAt(api, revRoot, newSeq, done())
-
-                  done( (err, values) => {
-                    if (err) return cb(err)
-                    cb(null, {
-                      key: revRoot,
-                      old_value: values[0],
-                      value: values[1]
-                    })
-                  })
-                })
-              )
+              validatedPastAndPresentValues(api, revRoots, oldSeq, newSeq, validator)
             )
           })
         )
@@ -443,30 +427,6 @@ exports.init = function (ssb, config) {
 
 // utils ///////
 
-function getValueAt(api, revRoot, at, cb) {
-  pull(
-    api.heads(revRoot, {
-      lte: at,
-      keys: true,
-      values: true,
-      seqs: true,
-      meta: true,
-      maxHeads: 1,
-      allowAllAuthors: true
-    }),
-    pull.collect((err, items) => {
-      if (err) return cb(err)
-      if (!items.length) return cb(null, null)
-      const head = items[0].heads[0]
-      cb(null, {
-        key: head.key, 
-        value: head.value, 
-        seq: head.seq, 
-        meta: items[0].meta,
-      })
-    })
-  )
-}
 
 function stripSingleKey() {
   return pull.map( kv => {
