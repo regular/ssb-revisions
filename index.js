@@ -189,22 +189,24 @@ exports.init = function (ssb, config) {
           sync: live
         }
       )),
-      pull.map( kv => {
+      pull.asyncMap( (kv, cb) => {
         if (kv.sync) {
           synced = true
-          return sync ? [state, kv] : [state]
+          return cb(null, sync ? [state, kv] : [state])
         }
         revisions.push(kv)
-        if (!meta) {
-          state.heads = findHeads(revRoot, revisions, {allowAllAuthors, validator}) 
-        } else {
-          const result = findHeads(revRoot, revisions, {allowAllAuthors, validator, meta: true}) 
-          state.heads = result.heads
-          meta.forked = state.heads.length > 1
-          meta.incomplete = result.meta.incomplete
-          meta.change_requests = result.meta.change_requests
-        }
-        return !live || (live && synced) ? [state] : null
+        findHeads(revRoot, revisions, {allowAllAuthors, validator, meta}, (err, result) => {
+          if (err) return cb(err)
+          if (!meta) {
+            state.heads = result
+          } else {
+            state.heads = result.heads
+            meta.forked = state.heads.length > 1
+            meta.incomplete = result.meta.incomplete
+            meta.change_requests = result.meta.change_requests
+          }
+          cb(null, !live || (live && synced) ? [state] : null)
+        }) 
       }),
       pull.filter(),
       pull.flatten(),

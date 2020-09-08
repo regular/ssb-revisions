@@ -2,7 +2,12 @@ const ssbsort = require('ssb-sort')
 const debug = require('debug')('default-validator')
 
 module.exports = function DefaultValidator(allowAllAuthors) {
-  return function(revisionRoot, msgMap, {
+  return function(revisionRoot, msgMap, api, opts, cb) {
+    const ret = validate(revisionRoot, msgMap, api, opts)
+    cb(null, ret)
+  }
+
+  function validate(revisionRoot, msgMap, {
     getOriginal,
     getStripped,
     ssbSort,

@@ -2,7 +2,11 @@ const ssbsort = require('ssb-sort')
 const debug = require('debug')('ssb-revisions:find-heads')
 const DefaultValidator = require('./default-validator')
 
-module.exports = function getHeads(revisionRoot, revisions, opts) {
+module.exports = function getHeads(revisionRoot, revisions, opts, cb) {
+  if (typeof opts == 'function') {
+    cb = opts
+    opts = {}
+  }
   opts = opts || {}
   const {meta} = opts
   const validator = opts.validator || DefaultValidator(opts.allowAllAuthors)
@@ -19,12 +23,12 @@ module.exports = function getHeads(revisionRoot, revisions, opts) {
     }
   }
 
-  return validator(revisionRoot, msgMap, {
+  validator(revisionRoot, msgMap, {
     getOriginal,
     isIncomplete: msgs => incomplete(msgs, revisionRoot),
     getStripped: ()=> strippedRevs,
     compare
-  }, {meta: opts.meta})
+  }, {meta: opts.meta}, cb)
 }
 
 function getStruppedRevs(revisions) {
