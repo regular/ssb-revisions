@@ -22,9 +22,9 @@ module.exports = function(db, log, ready, masterSince, createStream) {
     meta[name] = views[name].meta
 
     sv.since.once(function build (upto) {
-      debug('build: sv.since %d', upto)
+      debug('build: sv.since: %d', upto)
       log.since.once(function (since) {
-        debug('build: log.since %d', upto)
+        debug('build: log.since: %d', since)
         if(upto > since) {
           console.log('destroying', name)
           sv.destroy(function () { build(-1) })

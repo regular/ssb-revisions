@@ -47,7 +47,7 @@ exports.init = function (ssb, config) {
     ]
   })
 
-  const sv = ssb._flumeUse('revisions', (log, name) => {
+  const api = ssb._flumeUse('revisions', (log, name) => {
     _log = log
     return createView(log, name)
   })
@@ -57,7 +57,7 @@ exports.init = function (ssb, config) {
   // it won't callback until the key is found,
   // hoping that gossipping will make it available
   // eventually
-  sv.get = function(key, opts, cb) {
+  api.get = function(key, opts, cb) {
     if (typeof opts == 'function') {
       cb = opts
       opts = {}
@@ -66,7 +66,7 @@ exports.init = function (ssb, config) {
     const meta = {old: true}
     let type
     pull(
-      sv.read({
+      api.read({
         live: true,
         sync: true,
         values: true, // if this is not true, I get {key: undefined, value: undefined} (??)
@@ -105,12 +105,12 @@ exports.init = function (ssb, config) {
 
   // key may be original or revision
   // returns kv
-  sv.getLatestRevision = function(key, opts, cb) {
+  api.getLatestRevision = function(key, opts, cb) {
     if (typeof opts == 'function') {
       cb = opts
       opts = {}
     }
-    sv.get(key, {meta: true, values: true}, (err, kv) => {
+    api.get(key, {meta: true, values: true}, (err, kv) => {
       if (err) return cb(err)
       kv.key = key
       if (!kv.meta.original) {
@@ -118,7 +118,7 @@ exports.init = function (ssb, config) {
         return cb(null, kv)
       }
       pull(
-        sv.heads(key, {
+        api.heads(key, {
           keys: true,
           values: true,
           //seqs: true,
@@ -145,7 +145,7 @@ exports.init = function (ssb, config) {
     })
   }
 
-  sv.history = function(revRoot, opts) {
+  api.history = function(revRoot, opts) {
     opts = opts || {}
     // lt gt in opts are seqs
     const o = Object.assign(
@@ -158,7 +158,7 @@ exports.init = function (ssb, config) {
       }
     )
     return pull(
-      sv.read(o),
+      api.read(o),
       pull.map(kvv => {
         if (kvv.sync) return kvv
         if (opts.keys == false) delete kvv.value.key
@@ -170,7 +170,7 @@ exports.init = function (ssb, config) {
     )
   }
 
-  sv.heads = function(revRoot, opts) {
+  api.heads = function(revRoot, opts) {
     opts = opts || {}
     const {live, sync, allowAllAuthors} = opts
     const revisions = []
@@ -181,7 +181,7 @@ exports.init = function (ssb, config) {
       meta = state.meta = {}
     }
     const stream = pull(
-      sv.history(revRoot, Object.assign(
+      api.history(revRoot, Object.assign(
         {}, opts, {
           values: true,
           keys: true,
@@ -242,7 +242,7 @@ exports.init = function (ssb, config) {
     return deferred
   }
 
-  sv.updates = function(opts) {
+  api.updates = function(opts) {
     opts = opts || {}
     const oldSeq = opts.since !== undefined ? opts.since : -1
     const limit = opts.limit || 512 // TODO
@@ -250,17 +250,17 @@ exports.init = function (ssb, config) {
     let i = 0
     return next( ()=> { switch(i++) {
       case 0: 
-        //console.log('sv.read', oldSeq, '-', sv.since.value)
-        if (oldSeq == sv.since.value) {
+        //console.log('api.read', oldSeq, '-', api.since.value)
+        if (oldSeq == api.since.value) {
           newSeq = oldSeq
           return pull.empty()
         }
         const deferred = defer.source()
         // what revRoots where changed?
         pull(
-          sv.read({
+          api.read({
             gt: ['SR', oldSeq, undefined],
-            lte: ['SR', sv.since.value, undefined],
+            lte: ['SR', api.since.value, undefined],
             values: false,
             keys: true,
             seqs: false
@@ -286,9 +286,9 @@ exports.init = function (ssb, config) {
                 pull.asyncMap( (revRoot, cb) => {
                   const done = multicb({pluck: 1})
                   // TODO: getValueAt takes edits by all authors into account
-                  // this needs to be change to support change requests
-                  getValueAt(sv, revRoot, oldSeq, done())
-                  getValueAt(sv, revRoot, newSeq, done())
+                  // this needs to be changed to support change requests
+                  getValueAt(api, revRoot, oldSeq, done())
+                  getValueAt(api, revRoot, newSeq, done())
 
                   done( (err, values) => {
                     if (err) return cb(err)
@@ -308,7 +308,7 @@ exports.init = function (ssb, config) {
     }})
   }
 
-  sv.indexingSource = function(opts) {
+  api.indexingSource = function(opts) {
     opts = opts || {}
     // console.log('called indexingSource', opts)
     let lastSince = opts.since
@@ -322,17 +322,17 @@ exports.init = function (ssb, config) {
             return function read(end, cb) {
               ended = end || ended
               if (ended) return cb(ended)
-              if (sv.since.value > lastSince) return cb(true)
+              if (api.since.value > lastSince) return cb(true)
               debug('waiting ...')
               // wait for the next time 'since' is set
-              sv.since.once( ()=> cb(true), false )
+              api.since.once( ()=> cb(true), false )
             }
           })()
         )
       }
       //console.log('pulling non-live updates since', lastSince)
       return pull(
-        sv.updates({since: lastSince}),
+        api.updates({since: lastSince}),
         pull.map( kvv => {
           if (kvv.since !== undefined) {
             debug('received since %d', kvv.since)
@@ -351,10 +351,10 @@ exports.init = function (ssb, config) {
     })
   }
 
-  const addView = Indexing(ssb, _log, ssb.ready, sv.since, sv.indexingSource)
-  sv.use = function(name, createView) {
+  const addView = Indexing(ssb, _log, ssb.ready, api.since, api.indexingSource)
+  api.use = function(name, createView) {
     debug('use %s', name)
-    sv[name] = addView(name, createView)
+    api[name] = addView(name, createView)
 
     /*
     ssb._flumeUse(name, (log, name) => {
@@ -365,15 +365,15 @@ exports.init = function (ssb, config) {
           return pull.drain()
         }
       }
-      ViewProxy.prototype = sv[name].unwrapped
+      ViewProxy.prototype = api[name].unwrapped
       return new ViewProxy()
     })
     */
-    return sv
+    return api
   }
 
-  const close = sv.close
-  sv.close = function(cb) {
+  const close = api.close
+  api.close = function(cb) {
     debug('closing dependent views')
     addView.close(()=>{
       if (close) {
@@ -383,26 +383,26 @@ exports.init = function (ssb, config) {
     })
   }
 
-  sv.use('Stats', Stats())
-  sv.stats = sv.Stats.stream
+  api.use('Stats', Stats())
+  api.stats = api.Stats.stream
 
-  sv.use('Warnings', Warnings())
-  sv.warnings = sv.Warnings.read
+  api.use('Warnings', Warnings())
+  api.warnings = api.Warnings.read
 
-  sv.use('BranchIndex', Index('branch'))
-  sv.messagesByBranch= (name, opts) => sv.BranchIndex.read(Object.assign({
+  api.use('BranchIndex', Index('branch'))
+  api.messagesByBranch= (name, opts) => api.BranchIndex.read(Object.assign({
     gt: [name, null],
     lt: [name, undefined]
   }, opts || {}))
 
-  sv.use('TypeIndex', Index('type'))
-  sv.messagesByType = (name, opts) => sv.TypeIndex.read(Object.assign({
+  api.use('TypeIndex', Index('type'))
+  api.messagesByType = (name, opts) => api.TypeIndex.read(Object.assign({
     gt: [name, null],
     lt: [name, undefined]
   }, opts || {}))
 
-  sv.use('LinkIndex', Links())
-  sv.links = opts => {
+  api.use('LinkIndex', Links())
+  api.links = opts => {
     opts = opts || {}
     let o, m
     if (opts.to && opts.rel) {
@@ -431,21 +431,21 @@ exports.init = function (ssb, config) {
       m = ([_, to, rel, revroot]) => [rel, to, revroot]
     }
     return pull(
-      sv.LinkIndex.read(Object.assign(o, opts || {})),
+      api.LinkIndex.read(Object.assign(o, opts || {})),
       pull.through(kv => {
         if (kv.key) kv.key = m(kv.key)
       })
     )
   }
 
-  return sv
+  return api
 }
 
 // utils ///////
 
-function getValueAt(sv, revRoot, at, cb) {
+function getValueAt(api, revRoot, at, cb) {
   pull(
-    sv.heads(revRoot, {
+    api.heads(revRoot, {
       lte: at,
       keys: true,
       values: true,
@@ -457,10 +457,11 @@ function getValueAt(sv, revRoot, at, cb) {
     pull.collect((err, items) => {
       if (err) return cb(err)
       if (!items.length) return cb(null, null)
+      const head = items[0].heads[0]
       cb(null, {
-        key: items[0].heads[0].key, 
-        value: items[0].heads[0].value, 
-        seq: items[0].heads[0].seq, 
+        key: head.key, 
+        value: head.value, 
+        seq: head.seq, 
         meta: items[0].meta,
       })
     })

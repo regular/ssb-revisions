@@ -6,29 +6,30 @@ We want to reuse code from secure-scuttlebutt/indexes/
 A flumeview exports a function that creates a sink that will update the index.
 
 APPROACH
-
+- ssb-revisions is a flumeview-level that creates this view
+      ['RS', revisionRoot, seq],
+      ['SR', seq, revisionRoot],
+      // [B]ranch or [R]oot?
+      ['BR', kv.key, isUpdate(kv) ? 'B':'R']
+- this view is used to create streams for updating "dependent views". These dependent views are exposed
+  as ssb-revisions's API (messagesByType, ...)
 - store our indexes current since value, we will update
   the dependent index to this state
 - get all revRoots that where changed since the index was last updated
 - for every revroot, get the value at the time of the last update
 - and get the new value
-- emit the stored since value
+- emit the stored since value in the update streams
 
 A dependent index MUST write all these updates atomically once it
 sees the new since value. 
 
-TODO
+DETAILS
 
-- [x] heads() accepts opts.lte, this allows us to calculate the head
+- heads() accepts opts.lte, this allows us to calculate the head
 that was present the last time a dependant index was updated
-- [x] We can than use this previous head to get the previous value, which will allow
+- We can than use this previous head to get the previous value, which will allow
 the index to remove entries that are not longer valid (think: moving an object from one
 branch to another)
-
-- [x] opt.lte in heads()
-- [x] opt.gt opt.old_value in updates() 
-
-
 
 - [x] create a stream containing
   - [x] all messages in the log with no revisionRoot or revisionRoot == key ("original" messages)
@@ -36,4 +37,4 @@ branch to another)
   - [x] starting from a given seq
   - [x] emit 'since' events for skipped messages, so the index knows if it is uptodate
 
-- [x] add a `use` function that allows for registering a view
+-  a `use` function allows for registering a dependent view
