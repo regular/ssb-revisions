@@ -5,14 +5,14 @@ const CreateView = require('flumeview-level')
 const ltgt = require('ltgt')
 const debug = require('debug')('ssb-revisions')
 
-const findHeads = require('./find-heads')
+const findHeads = require('./validate/find-heads')
 const getRange = require('./get-range')
 const Indexing = require('./indexing')
 const Stats = require('./indexes/stats')
 const Warnings = require('./indexes/warnings')
 const Index = require('./indexes/generic')
 const Links = require('./indexes/links')
-const validatedPastAndPresentValues = require('./validate')
+const validatedPastAndPresentValues = require('./validate/validate')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
