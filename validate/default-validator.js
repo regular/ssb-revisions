@@ -1,28 +1,28 @@
 const ssbsort = require('ssb-sort')
 const debug = require('debug')('default-validator')
 
+const getOriginal = require('./get-original')
+const strip = require('./strip')
+const isIncomplete = require('./is-incomplete')
+const compare = require('./compare')
+
 module.exports = function DefaultValidator(allowAllAuthors) {
-  return function(revisionRoot, msgMap, api, opts, cb) {
-    const ret = validate(revisionRoot, msgMap, api, opts)
+  return function(revisionRoot, msgMap, opts, cb) {
+    const ret = validate(revisionRoot, msgMap, opts)
     cb(null, ret)
   }
 
-  function validate(revisionRoot, msgMap, {
-    getOriginal,
-    getStripped,
-    ssbSort,
-    isIncomplete,
-    compare
-  }, opts) {
+  function validate(revisionRoot, msgMap, opts) {
     opts = opts || {}
     const {meta} = opts
 
-    let hds = ssbsort.heads(getStripped())
+    const stripped = strip(msgMap)
+    let hds = ssbsort.heads(stripped)
     let change_requests = 0
 
     if (!allowAllAuthors) {
       // remove all heads that are not by the original author
-      const original = getOriginal()
+      const original = getOriginal(msgMap)
       if (!original) {
         debug('No original message found for %s', revisionRoot)
         if (!meta) return []
@@ -35,7 +35,7 @@ module.exports = function DefaultValidator(allowAllAuthors) {
         }
       }
       const {author} = original.value
-      const ret = removeForeign(hds, msgMap, getStripped(), author, 0)
+      const ret = removeForeign(hds, msgMap, stripped, author, 0)
       change_requests = ret.change_requests
       hds = ret.hds
     }
@@ -46,7 +46,7 @@ module.exports = function DefaultValidator(allowAllAuthors) {
       heads: hds,
       meta: {
         change_requests,
-        incomplete: isIncomplete(Object.values(msgMap))
+        incomplete: isIncomplete( stripped.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {} ))
       }
     }
   }
