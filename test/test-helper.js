@@ -37,7 +37,21 @@ function createDB(filename, cb) {
   ))
   
   let done = false
-  Revisions.init({
+  const _closeHooks = []
+
+  const ssb = {
+    close: function(cb) {
+      callHooks(db.close, [cb])
+      function callHooks(fn, args) {
+        if (_closeHooks.length) {
+          _closeHooks.shift()(function () {
+            callHooks(fn, Array.from(arguments))
+          }, args)
+        } else {
+          fn.apply(this, args)
+        }
+      }
+    },
     ready: ()=> db.ready.value, // this is what secure-scuttlebot turns the obv into, unfortunately
     get: db.get,
     _flumeUse: (name, view) => {
@@ -51,7 +65,12 @@ function createDB(filename, cb) {
       })
       return sv
     }
-  }, {
+  }
+  ssb.close.hook = fn=>{
+    console.log('close.hook called')
+    _closeHooks.push(fn)
+  }
+  Revisions.init(ssb, {
     // config
   })
 }

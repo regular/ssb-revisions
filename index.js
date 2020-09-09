@@ -17,7 +17,6 @@ const validatedPastAndPresentValues = require('./validate/validate')
 exports.name = 'revisions'
 exports.version = require('./package.json').version
 exports.manifest = {
-  close: 'async',
   get: 'async',
   getLatestRevision: 'async',
   history: 'source',
@@ -341,33 +340,15 @@ exports.init = function (ssb, config) {
   api.use = function(name, createView) {
     debug('use %s', name)
     api[name] = addView(name, createView)
-
-    /*
-    ssb._flumeUse(name, (log, name) => {
-      console.log('Calling fake createView')
-      function ViewProxy() {
-        this.createSink = function() {
-          console.log('Calling fake createSink')
-          return pull.drain()
-        }
-      }
-      ViewProxy.prototype = api[name].unwrapped
-      return new ViewProxy()
-    })
-    */
     return api
   }
 
-  const close = api.close
-  api.close = function(cb) {
+  ssb.close.hook( function(fn, args) {
     debug('closing dependent views')
     addView.close(()=>{
-      if (close) {
-        //console.log('calling orig close')
-        close(cb) 
-      } else cb()
+      fn.apply(this, args)
     })
-  }
+  })
 
   api.use('Stats', Stats())
   api.stats = api.Stats.stream
