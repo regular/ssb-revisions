@@ -9,6 +9,5 @@ module.exports = function getValidHeads(revisionRoot, revisions, opts, cb) {
   const {meta} = opts
   const validator = opts.validator || DefaultValidator(opts.allowAllAuthors)
 
-  const msgMap = revisions.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {})
-  validator(revisionRoot, msgMap, {meta: opts.meta}, cb)
+  validator(revisionRoot, revisions, {meta: opts.meta}, cb)
 }

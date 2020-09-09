@@ -1,5 +1,4 @@
-module.exports = function getStruppedRevs(msgMap) {
-  const revisions = Object.values(msgMap)
+module.exports = function getStruppedRevs(revisions) {
   return revisions.map( kv => {
     const {revisionRoot, revisionBranch} = kv.value.content
     return {

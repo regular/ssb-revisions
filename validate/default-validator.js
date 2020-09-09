@@ -1,28 +1,30 @@
 const ssbsort = require('ssb-sort')
 const debug = require('debug')('default-validator')
 
+const map = require('./msg-map')
 const getOriginal = require('./get-original')
 const strip = require('./strip')
 const isIncomplete = require('./is-incomplete')
 const compare = require('./compare')
 
 module.exports = function DefaultValidator(allowAllAuthors) {
-  return function(revisionRoot, msgMap, opts, cb) {
-    const ret = validate(revisionRoot, msgMap, opts)
+  return function(revisionRoot, revisions, opts, cb) {
+    const ret = validate(revisionRoot, revisions, opts)
     cb(null, ret)
   }
 
-  function validate(revisionRoot, msgMap, opts) {
+  function validate(revisionRoot, revisions, opts) {
     opts = opts || {}
     const {meta} = opts
 
-    const stripped = strip(msgMap)
+    const msgMap = map(revisions)
+    const stripped = strip(revisions)
     let hds = ssbsort.heads(stripped)
     let change_requests = 0
 
     if (!allowAllAuthors) {
       // remove all heads that are not by the original author
-      const original = getOriginal(msgMap)
+      const original = getOriginal(revisions)
       if (!original) {
         debug('No original message found for %s', revisionRoot)
         if (!meta) return []
@@ -46,7 +48,7 @@ module.exports = function DefaultValidator(allowAllAuthors) {
       heads: hds,
       meta: {
         change_requests,
-        incomplete: isIncomplete( stripped.reduce( (acc, kv) => (acc[kv.key] = kv, acc), {} ))
+        incomplete: isIncomplete(stripped)
       }
     }
   }
