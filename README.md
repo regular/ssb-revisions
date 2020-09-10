@@ -157,7 +157,7 @@ stream current heads of an object, most current head first.
   - live: stream live changes
   - sync: emit `{sync: true}` to separate old records and live data
   - meta: include meta data (see below)
-  - values: include values (default is false)
+  - values: include values (default is true)
   - keys: include keys (default is true)
   - maxHeads: limit number of returned heads
 
