@@ -1,5 +1,5 @@
 const multicb = require('multicb')
-const {test, msg, rndKey} = require('./test-helper')
+const {test, msg, rndKey} = require('../test-helper')
 
 test('old and new message without revisions', (t, db) => {
   const keyA = rndKey()

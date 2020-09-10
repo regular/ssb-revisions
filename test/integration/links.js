@@ -1,7 +1,7 @@
+const crypto = require('crypto')
 const pull = require('pull-stream')
 const multicb = require('multicb')
-const {test, msg, rndKey} = require('./test-helper')
-const crypto = require('crypto')
+const {test, msg, rndKey} = require('../test-helper')
 
 test('links {to: x}', (t, db) => {
   const keyA = debugKey('keyA')

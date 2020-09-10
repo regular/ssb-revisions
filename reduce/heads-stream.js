@@ -21,7 +21,8 @@ module.exports = function(historyStream) {
         {}, opts, {
           values: true,
           keys: true,
-          sync: live
+          live: live,
+          sync: live // always emit sync in live mode
         }
       )),
       pull.asyncMap( (kv, cb) => {

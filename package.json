@@ -4,7 +4,7 @@
   "description": "mutable documents for secure scuttlebutt",
   "main": "index.js",
   "scripts": {
-    "test": "tape test/*.js"
+    "test": "tape test/unit/*.js && tape test/integration/*.js"
   },
   "author": "Jan Bölsche <jan@lagomorph.de> (https://regular.codes/)",
   "license": "ISC",

@@ -1,5 +1,5 @@
 const pull = require('pull-stream')
-const {test, msg, rndKey} = require('./test-helper')
+const {test, msg, rndKey} = require('../test-helper')
 
 function append(db, msgs, cb) {
   pull(

@@ -1,7 +1,7 @@
 const pull = require('pull-stream')
 const multicb = require('multicb')
-const {test, msg, rndKey} = require('./test-helper')
-const Stats = require('../indexes/stats')
+const {test, msg, rndKey} = require('../test-helper')
+const Stats = require('../../indexes/stats')
 
 function fooMsg(key, revRoot, revBranch, foo) {
   const ret = msg(key, revRoot, revBranch)

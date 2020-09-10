@@ -1,8 +1,7 @@
+const crypto = require('crypto')
 const pull = require('pull-stream')
 const multicb = require('multicb')
-const {test, msg, rndKey} = require('./test-helper')
-const crypto = require('crypto')
-
+const {test, msg, rndKey} = require('../test-helper')
 
 test('Wait for index to catch up', (t, db) => {
   const N = 2000
