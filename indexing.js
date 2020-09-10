@@ -1,6 +1,5 @@
 const debug = require('debug')('ssb-revisions indexing')
-//const wrap = require('flumedb/wrap')
-const wrap = require('./wrap')
+const wrap = require('./lib/wrap')
 const Looper = require('pull-looper')
 const pull = require('pull-stream')
 const explain = require('explain-error')
@@ -10,7 +9,7 @@ module.exports = function(db, log, ready, masterSince, createStream) {
   const views = {}
   const meta = {}
 
-  const ret = function use(name, createView) {
+  const ret = function addView(name, createView) {
 
     if(~Object.keys(views).indexOf(name))
       throw new Error(name + ' is already in use!')

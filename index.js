@@ -1,18 +1,24 @@
 const pull = require('pull-stream')
 const defer = require('pull-defer')
 const next = require('pull-next')
-const CreateView = require('flumeview-level')
 const ltgt = require('ltgt')
 const debug = require('debug')('ssb-revisions')
+const CreateView = require('flumeview-level')
 
-const findHeads = require('./validate/find-heads')
-const getRange = require('./get-range')
+const getRange = require('./lib/get-range')
+const {stripSingleKey, filterRepeated} = require('./lib/stream-formatting.js')
+
+const HeadsStream = require('./reduce/heads-stream')
+const GetLatestRevision = require('./reduce/get-latest-revision')
+
+const findHeads = require('./reduce/find-heads')
+const pastAndPresentHeads = require('./reduce/past-and-present-heads')
+
 const Indexing = require('./indexing')
+const Index = require('./indexes/generic')
 const Stats = require('./indexes/stats')
 const Warnings = require('./indexes/warnings')
-const Index = require('./indexes/generic')
 const Links = require('./indexes/links')
-const validatedPastAndPresentValues = require('./validate/validate')
 
 exports.name = 'revisions'
 exports.version = require('./package.json').version
@@ -33,6 +39,7 @@ const IDXVER = 6
 
 exports.init = function (ssb, config) {
   let _log
+  const {NO_DEPENDENT_VIEWS} = config // for testing and debuging
 
   const createView = CreateView(IDXVER, (kv, seq) => {
     const c = kv.value && kv.value.content
@@ -41,7 +48,7 @@ exports.init = function (ssb, config) {
     return [
       ['RS', revisionRoot, seq],
       ['SR', seq, revisionRoot],
-      // [B]ranch or [R]oot?
+      // revision[B]ranch or revision[R]oot?
       ['BR', kv.key, isUpdate(kv) ? 'B':'R']
     ]
   })
@@ -102,49 +109,6 @@ exports.init = function (ssb, config) {
     )
   }
 
-  // key may be original or revision
-  // returns kv
-  api.getLatestRevision = function(key, opts, cb) {
-    if (typeof opts == 'function') {
-      cb = opts
-      opts = {}
-    }
-    api.get(key, {meta: true, values: true}, (err, kv) => {
-      if (err) return cb(err)
-      kv.key = key
-      if (!kv.meta.original) {
-        // it's a revision
-        return cb(null, kv)
-      }
-      pull(
-        api.heads(key, {
-          keys: true,
-          values: true,
-          //seqs: true,
-          validator: opts.validator,
-          allowAllAuthors: opts.allowAllAuthors,
-          meta: true,
-          maxHeads: 1
-        }),
-        pull.collect((err, items) => {
-          if (err) return cb(err)
-          if (!items.length) return cb(new Error(`key not found: ${key}`))
-          const head = items[0].heads[0]
-          cb(null, {
-            key: head.key, 
-            value: head.value, 
-            //seq: head.seq, 
-            meta: Object.assign(
-              kv.meta, {
-                original: head.key == key,
-              }, items[0].meta
-            )
-          })
-        })
-      )
-    })
-  }
-
   api.history = function(revRoot, opts) {
     opts = opts || {}
     // lt gt in opts are seqs
@@ -170,85 +134,15 @@ exports.init = function (ssb, config) {
     )
   }
 
-  api.heads = function(revRoot, opts) {
-    opts = opts || {}
-    const {live, sync, allowAllAuthors, validator} = opts
-    const revisions = []
-    let synced = false
-    const state = {}
-    let meta
-    if (opts.meta) {
-      meta = state.meta = {}
-    }
-    const stream = pull(
-      api.history(revRoot, Object.assign(
-        {}, opts, {
-          values: true,
-          keys: true,
-          sync: live
-        }
-      )),
-      pull.asyncMap( (kv, cb) => {
-        if (kv.sync) {
-          synced = true
-          return cb(null, sync ? [state, kv] : [state])
-        }
-        revisions.push(kv)
-        findHeads(revRoot, revisions, {allowAllAuthors, validator, meta}, (err, result) => {
-          if (err) return cb(err)
-          if (!meta) {
-            state.heads = result
-          } else {
-            state.heads = result.heads
-            meta.forked = state.heads.length > 1
-            meta.incomplete = result.meta.incomplete
-            meta.change_requests = result.meta.change_requests
-          }
-          cb(null, !live || (live && synced) ? [state] : null)
-        }) 
-      }),
-      pull.filter(),
-      pull.flatten(),
-      pull.asyncMap( (result, cb) =>{
-        pull(
-          pull.values(result.heads),
-          opts.maxHeads ? pull.take(opts.maxHeads) : pull.through(),
-          pull.through( h => {
-            if (opts.keys == false) delete h.key
-            if (opts.values == false) delete h.value
-          }),
-          stripSingleKey(),
-          pull.collect( (err, heads) => {
-            if (opts.keys == false && opts.values == false) {
-              delete result.heads
-            } else {
-              result.heads = heads
-            }
-            cb(err, result)
-          })
-        )
-      }),
-      stripSingleKey(),
-      filterRepeated( JSON.stringify )
-    )
-    if (live) return stream
-    const deferred = defer.source()
-    let lastState
-    pull(
-      stream,
-      pull.drain( result => { lastState = result }, err => {
-        if (err) return deferred.resolve(pull.error(err))
-        deferred.resolve(pull.once(lastState))
-      })
-    )
-    return deferred
-  }
+  // reducing APIs
+  api.heads = HeadsStream(api.history)
+  api.getLatestRevision = GetLatestRevision(api.get, api.heads)
 
   api.updates = function(opts) {
     opts = opts || {}
     const oldSeq = opts.since !== undefined ? opts.since : -1
     const limit = opts.limit || 512 // TODO
-    const validator = opts.validator
+    const {validator, allowAllAuthors} = opts
     let newSeq = -1
     let i = 0
     return next( ()=> { switch(i++) {
@@ -284,7 +178,8 @@ exports.init = function (ssb, config) {
             }
             debug('processing updates from %d to %d', oldSeq, newSeq)
             deferred.resolve(
-              validatedPastAndPresentValues(api, revRoots, oldSeq, newSeq, validator)
+              // TODO: padd allowAllAuthors
+              pastAndPresentHeads(api, revRoots, oldSeq, newSeq, validator)
             )
           })
         )
@@ -297,6 +192,7 @@ exports.init = function (ssb, config) {
     opts = opts || {}
     // console.log('called indexingSource', opts)
     let lastSince = opts.since
+    const {validator, allowAllAuthors} = opts
     let synced = false  
     return next( ()=> {
       if (synced) {
@@ -317,12 +213,11 @@ exports.init = function (ssb, config) {
       }
       //console.log('pulling non-live updates since', lastSince)
       return pull(
-        api.updates({since: lastSince}),
+        api.updates({since: lastSince, validator, allowAllAuthors}),
         pull.map( kvv => {
           if (kvv.since !== undefined) {
             debug('received since %d', kvv.since)
             if (kvv.since == lastSince) {
-              //console.log('synced!')
               synced = true
               return null
             } else {
@@ -350,104 +245,66 @@ exports.init = function (ssb, config) {
     })
   })
 
-  api.use('Stats', Stats())
-  api.stats = api.Stats.stream
+  if (!NO_DEPENDENT_VIEWS) {
+    api.use('Stats', Stats())
+    api.stats = api.Stats.stream
 
-  api.use('Warnings', Warnings())
-  api.warnings = api.Warnings.read
+    api.use('Warnings', Warnings())
+    api.warnings = api.Warnings.read
 
-  api.use('BranchIndex', Index('branch'))
-  api.messagesByBranch= (name, opts) => api.BranchIndex.read(Object.assign({
-    gt: [name, null],
-    lt: [name, undefined]
-  }, opts || {}))
+    api.use('BranchIndex', Index('branch'))
+    api.messagesByBranch= (name, opts) => api.BranchIndex.read(Object.assign({
+      gt: [name, null],
+      lt: [name, undefined]
+    }, opts || {}))
 
-  api.use('TypeIndex', Index('type'))
-  api.messagesByType = (name, opts) => api.TypeIndex.read(Object.assign({
-    gt: [name, null],
-    lt: [name, undefined]
-  }, opts || {}))
+    api.use('TypeIndex', Index('type'))
+    api.messagesByType = (name, opts) => api.TypeIndex.read(Object.assign({
+      gt: [name, null],
+      lt: [name, undefined]
+    }, opts || {}))
 
-  api.use('LinkIndex', Links())
-  api.links = opts => {
-    opts = opts || {}
-    let o, m
-    if (opts.to && opts.rel) {
-      o = {
-        gt: ['R', opts.rel, opts.to, null], 
-        lt: ['R', opts.rel, opts.to + '~', undefined]
+    api.use('LinkIndex', Links())
+    api.links = opts => {
+      opts = opts || {}
+      let o, m
+      if (opts.to && opts.rel) {
+        o = {
+          gt: ['R', opts.rel, opts.to, null], 
+          lt: ['R', opts.rel, opts.to + '~', undefined]
+        }
+        m = ([_, rel, to, revroot]) => [rel, to, revroot]
+      } else if (opts.rel) {
+        o = {
+          gt: ['R', opts.rel, null, null], 
+          lt: ['R', opts.rel, undefined, undefined]
+        }
+        m = ([_, rel, to, revroot]) => [rel, to, revroot]
+      } else if (opts.to) {
+        o = {
+          gt: ['T', opts.to, null], 
+          lt: ['T', opts.to + '~', undefined]
+        }
+        m = ([_, to, rel, revroot]) => [rel, to, revroot]
+      } else {
+        o = {
+          gt: ['T', null, null], 
+          lt: ['T', undefined, undefined]
+        }
+        m = ([_, to, rel, revroot]) => [rel, to, revroot]
       }
-      m = ([_, rel, to, revroot]) => [rel, to, revroot]
-    } else if (opts.rel) {
-      o = {
-        gt: ['R', opts.rel, null, null], 
-        lt: ['R', opts.rel, undefined, undefined]
-      }
-      m = ([_, rel, to, revroot]) => [rel, to, revroot]
-    } else if (opts.to) {
-      o = {
-        gt: ['T', opts.to, null], 
-        lt: ['T', opts.to + '~', undefined]
-      }
-      m = ([_, to, rel, revroot]) => [rel, to, revroot]
-    } else {
-      o = {
-        gt: ['T', null, null], 
-        lt: ['T', undefined, undefined]
-      }
-      m = ([_, to, rel, revroot]) => [rel, to, revroot]
+      return pull(
+        api.LinkIndex.read(Object.assign(o, opts || {})),
+        pull.through(kv => {
+          if (kv.key) kv.key = m(kv.key)
+        })
+      )
     }
-    return pull(
-      api.LinkIndex.read(Object.assign(o, opts || {})),
-      pull.through(kv => {
-        if (kv.key) kv.key = m(kv.key)
-      })
-    )
   }
-
   return api
 }
 
 // utils ///////
-
-
-function stripSingleKey() {
-  return pull.map( kv => {
-    if (kv.sync) return kv
-    if (Object.keys(kv).length == 1) {
-      for(let k in kv) return kv[k]
-    }
-    return kv
-  })
-}
-
-function filterRepeated(f) {
-  let last
-  return pull.filter( x => {
-    const y = f(x)
-    const ret = last != y
-    last = y
-    return ret
-  })
-}
-
-function ary(x) {
-  if (x==undefined || x==null) return []
-  return Array.isArray(x) ? x : [x]
-}
-
-function toMsg(revisionRoot) {
-  return function(r) {
-    const {key, revisionBranch, timestamp} = r
-    return {
-      key,
-      value: {
-        timestamp,
-        content: {revisionRoot, revisionBranch}
-      }
-    }
-  }
-}
 
 function isUpdate(kv) {
   const content = kv.value && kv.value.content

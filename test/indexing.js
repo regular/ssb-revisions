@@ -21,6 +21,7 @@ function append(db, msgs, cb) {
   )
 }
 
+
 test('indexingSource (from start, out of order, waiting path)', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
@@ -188,4 +189,71 @@ test('indexingSource (from start, out of order, non-waiting path)', (t, db) => {
   })
 })
 
+/*
+
+test('indexingSource (custom validator)', (t, db) => {
+  const keyA = rndKey()
+  const keyB = rndKey()
+  const keyC = rndKey()
+  const keyD = rndKey()
+  const a = msg(keyA)
+  const b = msg(keyB, keyA, [keyA])
+  const c = msg(keyC, keyA, [keyA]) // fork
+  const d = msg(keyD, keyA, [keyB, keyC]) // merge
+
+  let i = -1
+  
+  t.plan(10)
+
+  append(db, [a, b, c, d], seqs => {
+    // wait for revisions view to be synced with db
+    db.revisions.since( since => {
+      if (since < seqs.slice(-1)[0]) return
+      console.log('XXX sv is at ', since)
+
+      let validatorCall = 0
+      function validator(revRoot, revs, opts, cb) {
+        validatorCall++
+        console.log('validator call #%d: %o', validatorCall, revs)
+        t.equal(revRoot, keyA, 'validator is called with correct revRoot')
+        t.equal(validatorCall, 1, 'validator is called once')
+        t.deepEqual(revs, [a,b,c,d], 'validator is called with all four revisions')
+        cb(null, {
+          heads: [d],
+          meta: {
+            incomplete: false,
+            change_requests: 0
+          }
+        })
+      }
+
+      pull(
+        db.revisions.indexingSource({validator}),
+
+        pull.asyncMap( (kvv, cb) => {
+          i++
+          console.log('update stream item #%d', i, kvv)
+          if (i==0) {
+            t.equal(kvv.key, keyA, 'revisionRoot')
+            t.equal(kvv.value.key, keyD, 'revisionBranch')
+            t.deepEqual(kvv.value.value, d.value, 'message value')
+            t.notOk(kvv.value.meta.incomplete, 'meta.incomplete')
+            t.notOk(kvv.old_value, 'old_value')
+            return cb(null, kvv)
+          } else if (i==1) {
+            t.equal(kvv.since, seqs.slice(-1)[0], '"since" item in stream')
+            return cb(true)
+          }         
+        }),
+        pull.drain( kvv => {}, end => {
+          console.log('drain end', end)
+          t.equal(end, null)
+          db.close( ()=> t.end() )
+        })
+      )
+    })
+  })
+})
+
+*/
 

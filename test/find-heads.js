@@ -1,5 +1,5 @@
 const test = require('tape')
-const heads = require('../validate/find-heads')
+const heads = require('../reduce/find-heads')
 const {msg, rndKey} = require('./test-helper')
 
 function authorMsg(author, ...args) {

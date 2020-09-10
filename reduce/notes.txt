@@ -1,0 +1,8 @@
+
+heads() is used by getValueAt()
+It uses history and findHeads.
+PROBLEM: all intermediate steps are run through findHeads!
+
+There's a test in text/indexing, but it should be in updates.
+
+

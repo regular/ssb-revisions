@@ -1,5 +1,5 @@
 const test = require('tape')
-const gr = require('../get-range')
+const gr = require('../lib/get-range')
 
 test('No range specified', t => {
   const r= gr([1], {})
