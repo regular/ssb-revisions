@@ -1,18 +1,16 @@
 const pull = require('pull-stream')
-const defer = require('pull-defer')
 const next = require('pull-next')
-const ltgt = require('ltgt')
 const debug = require('debug')('ssb-revisions')
 const CreateView = require('flumeview-level')
 
-const getRange = require('./lib/get-range')
 const {stripSingleKey, filterRepeated} = require('./lib/stream-formatting.js')
 
+const HistoryStream = require('./history-stream')
 const HeadsStream = require('./reduce/heads-stream')
 const GetLatestRevision = require('./reduce/get-latest-revision')
+const UpdatesStream = require('./updates-stream')
 
 const findHeads = require('./reduce/find-heads')
-const pastAndPresentHeads = require('./reduce/past-and-present-heads')
 
 const Indexing = require('./indexing')
 const Index = require('./indexes/generic')
@@ -57,6 +55,10 @@ exports.init = function (ssb, config) {
     _log = log
     return createView(log, name)
   })
+
+  const streamHistory = HistoryStream(api.read)
+  const streamHeads = HeadsStream(streamHistory)
+  const streamUpdates = UpdatesStream(api.read, api.since, streamHeads)
 
   // key can be a revRoot or a revision
   // the difference to ssb.get() is that
@@ -109,84 +111,13 @@ exports.init = function (ssb, config) {
     )
   }
 
-  api.history = function(revRoot, opts) {
-    opts = opts || {}
-    // lt gt in opts are seqs
-    const o = Object.assign(
-      getRange(['RS', revRoot], opts), {
-        values: true,
-        keys: false,
-        seqs: true,
-        live: opts.live,
-        sync: opts.sync
-      }
-    )
-    return pull(
-      api.read(o),
-      pull.map(kvv => {
-        if (kvv.sync) return kvv
-        if (opts.keys == false) delete kvv.value.key
-        if (opts.values == false) delete kvv.value.value
-        if (opts.seqs) kvv.value.seq = kvv.seq
-        return kvv.value
-      }),
-      stripSingleKey()
-    )
-  }
+  api.history = streamHistory
 
   // reducing APIs
-  api.heads = HeadsStream(api.history)
-  api.getLatestRevision = GetLatestRevision(api.get, api.heads)
+  api.heads = streamHeads
+  api.getLatestRevision = GetLatestRevision(api.get, streamHeads)
 
-  api.updates = function(opts) {
-    opts = opts || {}
-    const oldSeq = opts.since !== undefined ? opts.since : -1
-    const limit = opts.limit || 512 // TODO
-    const {validator, allowAllAuthors} = opts
-    let newSeq = -1
-    let i = 0
-    return next( ()=> { switch(i++) {
-      case 0: 
-        //console.log('api.read', oldSeq, '-', api.since.value)
-        if (oldSeq == api.since.value) {
-          newSeq = oldSeq
-          return pull.empty()
-        }
-        const deferred = defer.source()
-        // what revRoots where changed?
-        pull(
-          api.read({
-            gt: ['SR', oldSeq, undefined],
-            lte: ['SR', api.since.value, undefined],
-            values: false,
-            keys: true,
-            seqs: false
-          }),
-          pull.through( ([_, seq, __]) => {
-            newSeq = Math.max(newSeq, seq)
-          }),
-          pull.map(([_, __, revRoot]) => revRoot),
-          pull.unique(),
-          pull.take(limit),
-          pull.collect( (err, revRoots) => {
-            if (err) return deferred.resolve(pull.error(err))
-            if (newSeq == -1 || newSeq == oldSeq) {
-              // we have not seen any revisions
-              //console.log('empty set, oldSeq=', oldSeq)
-              newSeq = oldSeq
-              return deferred.resolve(pull.empty())
-            }
-            debug('processing updates from %d to %d', oldSeq, newSeq)
-            deferred.resolve(
-              // TODO: padd allowAllAuthors
-              pastAndPresentHeads(api, revRoots, oldSeq, newSeq, validator)
-            )
-          })
-        )
-        return deferred
-      case 1: return pull.once({since: newSeq})
-    }})
-  }
+  api.updates = streamUpdates
 
   api.indexingSource = function(opts) {
     opts = opts || {}

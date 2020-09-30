@@ -72,6 +72,7 @@ function createDB(filename, cb) {
   }
   Revisions.init(ssb, {
     // config
+    //NO_DEPENDENT_VIEWS: true
   })
 }
 

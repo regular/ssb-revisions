@@ -27,7 +27,6 @@ test('updates (single)', (t, db) => {
         db.revisions.updates(),
         pull.collect( (err, items) => {
           t.notOk(err, 'no error')
-          console.log('items', items)
           t.equal(items.length, 2)
           t.deepEquals(items[0], {
             key: keyA,
@@ -54,6 +53,8 @@ test('updates (single)', (t, db) => {
 })
 
 test('updates {since: 0}', (t, db) => {
+  // NOTE: since: 0 means: give me all updates *after* the one at seq==0, so it
+  // excludes the first message
   const keyA = rndKey()
   const keyB = rndKey()
   const a = msg(keyA)
@@ -194,5 +195,4 @@ test('updates (meta)', (t, db) => {
     })
   })
 })
-
 

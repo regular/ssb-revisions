@@ -25,7 +25,7 @@ module.exports = function(db, log, ready, masterSince, createStream) {
       log.since.once(function (since) {
         debug('build: log.since: %d', since)
         if(upto > since) {
-          console.log('destroying', name)
+          //console.log('destroying', name)
           sv.destroy(function () { build(-1) })
         } else {
           const opts = {}
