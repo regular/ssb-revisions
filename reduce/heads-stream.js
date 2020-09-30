@@ -10,77 +10,106 @@ module.exports = function(historyStream) {
     opts = opts || {}
     const {live, sync, allowAllAuthors, validator} = opts
     const revisions = []
-    let synced = false
     const state = {}
-    let meta
-    if (opts.meta) {
-      meta = state.meta = {}
+    const  meta = opts.meta ? (state.meta = {}) : false
+
+    if (live) {
+      return pull(
+        source(),
+        liveStream(),
+        format()
+      ) 
+    } else {
+      return pull(
+        pull.once(1),
+        pull.asyncMap( (_, cb) =>{
+          pull(
+            source(),
+            pull.drain(rev=>revisions.push(rev), err =>{
+              if (err) return cb(err)
+              if (revisions.length == 0) return cb(null, null)
+              getHeads(cb)
+            })
+          )
+        }),
+        pull.filter(),
+        format()
+      )
     }
-    const stream = pull(
-      historyStream(revRoot, Object.assign(
-        {}, opts, {
-          values: true,
-          keys: true,
-          live: live,
-          sync: live // always emit sync in live mode
+
+    function source() {
+      return historyStream(revRoot, Object.assign({}, opts, {
+        values: true,
+        keys: true,
+        live: live,
+        sync: live // always emit sync in live mode
+      }))
+    }
+
+    function getHeads(cb) {
+      findHeads(revRoot, revisions, {allowAllAuthors, validator, meta: opts.meta}, (err, result) => {
+        if (err) return cb(err)
+        if (!meta) {
+          state.heads = result
+        } else {
+          state.heads = result.heads
+          meta.forked = state.heads.length > 1
+          meta.incomplete = result.meta.incomplete
+          meta.change_requests = result.meta.change_requests
         }
-      )),
-      pull.asyncMap( (kv, cb) => {
-        if (kv.sync) {
-          synced = true
-          return cb(null, sync ? [state, kv] : [state])
-        }
-        revisions.push(kv)
-        // TODO: when called from getMessageAt() (validate.js)
-        // findHeads is called for every intermediate state,
-        // not just the last state, which is a waste!
-        findHeads(revRoot, revisions, {allowAllAuthors, validator, meta}, (err, result) => {
-          if (err) return cb(err)
-          if (!meta) {
-            state.heads = result
+        cb(null, state)
+      }) 
+    }
+
+    function liveStream() {
+      let synced = false
+      return pull(
+        pull.asyncMap( (kv, cb) => {
+          if (kv.sync) {
+            synced = true
+            getHeads( err=>{
+              if (err) return cb(err)
+              cb(null, opts.sync ? [state, kv] : [state])
+            })
+            return
           } else {
-            state.heads = result.heads
-            meta.forked = state.heads.length > 1
-            meta.incomplete = result.meta.incomplete
-            meta.change_requests = result.meta.change_requests
+            revisions.push(kv)
           }
-          cb(null, !live || (live && synced) ? [state] : null)
-        }) 
-      }),
-      pull.filter(),
-      pull.flatten(),
-      pull.asyncMap( (result, cb) =>{
-        pull(
-          pull.values(result.heads),
-          opts.maxHeads ? pull.take(opts.maxHeads) : pull.through(),
-          pull.through( h => {
-            if (opts.keys == false) delete h.key
-            if (opts.values == false) delete h.value
-          }),
-          stripSingleKey(),
-          pull.collect( (err, heads) => {
-            if (opts.keys == false && opts.values == false) {
-              delete result.heads
-            } else {
-              result.heads = heads
-            }
-            cb(err, result)
+          if (!synced) return cb(null, null)
+          getHeads(err=>{
+            if (err) return cb(err)
+            cb(null, [state])
           })
-        )
-      }),
-      stripSingleKey(),
-      filterRepeated( JSON.stringify )
-    )
-    if (live) return stream
-    const deferred = defer.source()
-    let lastState
-    pull(
-      stream,
-      pull.drain( result => { lastState = result }, err => {
-        if (err) return deferred.resolve(pull.error(err))
-        deferred.resolve(pull.once(lastState))
-      })
-    )
-    return deferred
+        }),
+        pull.filter(),
+        pull.flatten()
+      )
+    }
+
+    function format() {
+      return pull(
+        pull.asyncMap( (result, cb) =>{
+          pull(
+            pull.values(result.heads),
+            opts.maxHeads ? pull.take(opts.maxHeads) : pull.through(),
+            pull.through( h => {
+              if (opts.keys == false) delete h.key
+              if (opts.values == false) delete h.value
+            }),
+            stripSingleKey(),
+            pull.collect( (err, heads) => {
+              if (opts.keys == false && opts.values == false) {
+                delete result.heads
+              } else {
+                result.heads = heads
+              }
+              cb(err, result)
+            })
+          )
+        }),
+        stripSingleKey(),
+        filterRepeated( JSON.stringify )
+      )
+    }
   }
 }
