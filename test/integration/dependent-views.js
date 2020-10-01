@@ -51,7 +51,6 @@ test('use() registers a view', (t, db) => {
     }
   }
 
-
   console.log('calling use() from test')
   db.revisions.use('bar', createView)
   t.ok(db.revisions.bar, 'db.revisions has property bar')

@@ -48,8 +48,7 @@ module.exports = function(read, since, streamHeads) {
             }
             debug('processing updates from %d to %d', oldSeq, newSeq)
             deferred.resolve(
-              // TODO: pass allowAllAuthors
-              pastAndPresentHeads(revRoots, oldSeq, newSeq, validator)
+              pastAndPresentHeads(revRoots, oldSeq, newSeq, {validator, allowAllAuthors})
             )
           })
         )

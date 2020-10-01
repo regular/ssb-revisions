@@ -28,11 +28,13 @@ module.exports = function(db, log, ready, masterSince, createStream) {
           //console.log('destroying', name)
           sv.destroy(function () { build(-1) })
         } else {
-          const opts = {}
+          const opts = {
+            allowAllAuthors: true
+          }
           if (upto !== -1 && upto !== null) opts.since = upto // TODO: call it gt?
           if (upto == -1) opts.cache = false
 
-          debug('Indexing opts are: %s', JSON.stringify(opts))
+          debug('Indexing opts are: %o', opts)
 
           pull(
             createStream(opts),

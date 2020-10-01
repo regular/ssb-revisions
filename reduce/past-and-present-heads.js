@@ -3,15 +3,17 @@ const multicb = require('multicb')
 const debug = require('debug')('ssb-revisions:past-and-present-heads')
 
 module.exports = function(streamHeads) {
-  return function pastAndPresentHeads(revRoots, oldSeq, newSeq, validator) {
+  return function pastAndPresentHeads(revRoots, oldSeq, newSeq, opts) {
+    opts = opts || {}
+    const {validator, allowAllAuthors} = opts
     debug('processing %d revRoots. old seq: %d, new seq: %d', revRoots.length, oldSeq, newSeq)
 
     return pull(
       pull.values(revRoots),
       pull.asyncMap( (revRoot, cb) => {
         const done = multicb({pluck: 1})
-        getValueAt(revRoot, oldSeq, validator, done())
-        getValueAt(revRoot, newSeq, validator, done())
+        getValueAt(revRoot, oldSeq, {validator, allowAllAuthors}, done())
+        getValueAt(revRoot, newSeq, {validator, allowAllAuthors}, done())
 
         done( (err, values) => {
           if (err) return cb(err)
@@ -25,7 +27,8 @@ module.exports = function(streamHeads) {
     )
   }
 
-  function getValueAt(revRoot, seq, validator, cb) {
+  function getValueAt(revRoot, seq, opts, cb) {
+    const {validator, allowAllAuthors} = opts
     debug('getValue for %s at seq %d', revRoot, seq)
     if (seq == -1) return cb(null, null)
     pull(
@@ -40,7 +43,8 @@ module.exports = function(streamHeads) {
         // TODO: here's why formerly
         // views took all revisions into account
         // (no validation)
-        allowAllAuthors: true
+        // This formerly was hardoced to true
+        allowAllAuthors
       }),
       pull.collect((err, items) => {
         if (err) return cb(err)
