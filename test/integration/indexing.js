@@ -189,8 +189,6 @@ test('indexingSource (from start, out of order, non-waiting path)', (t, db) => {
   })
 })
 
-/*
-
 test('indexingSource (custom validator)', (t, db) => {
   const keyA = rndKey()
   const keyB = rndKey()
@@ -203,7 +201,7 @@ test('indexingSource (custom validator)', (t, db) => {
 
   let i = -1
   
-  t.plan(10)
+  t.plan(12)
 
   append(db, [a, b, c, d], seqs => {
     // wait for revisions view to be synced with db
@@ -217,12 +215,13 @@ test('indexingSource (custom validator)', (t, db) => {
         console.log('validator call #%d: %o', validatorCall, revs)
         t.equal(revRoot, keyA, 'validator is called with correct revRoot')
         t.equal(validatorCall, 1, 'validator is called once')
-        t.deepEqual(revs, [a,b,c,d], 'validator is called with all four revisions')
+        console.log('seqs:', revs.map(x=>x.seq))
+        t.deepEqual(revs, [a,b,c,d].map((x,i)=>(x.seq=revs[i].seq,x)), 'validator is called with all four revisions')
         cb(null, {
-          heads: [d],
+          heads: [d,c],
           meta: {
             incomplete: false,
-            change_requests: 0
+            change_requests: 1
           }
         })
       }
@@ -238,6 +237,8 @@ test('indexingSource (custom validator)', (t, db) => {
             t.equal(kvv.value.key, keyD, 'revisionBranch')
             t.deepEqual(kvv.value.value, d.value, 'message value')
             t.notOk(kvv.value.meta.incomplete, 'meta.incomplete')
+            t.ok(kvv.value.meta.forked, 'meta.forked')
+            t.equal(kvv.value.meta.change_requests, 1, 'meta.change_requests')
             t.notOk(kvv.old_value, 'old_value')
             return cb(null, kvv)
           } else if (i==1) {
@@ -254,6 +255,4 @@ test('indexingSource (custom validator)', (t, db) => {
     })
   })
 })
-
-*/
 
