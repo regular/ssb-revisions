@@ -24,11 +24,11 @@ test('use() registers a view', (t, db) => {
       createSink: cb => {
         return pull(
           pull.asyncMap( (x, cb) => {
-            console.log('Got foo:', JSON.stringify(x, null, 2))
+            console.log('view sink received: %o', x)
             setTimeout( ()=> cb(null, x), 1000)
           }),
           pull.drain( kvv => {
-            console.log('Indexing foo:', JSON.stringify(kvv, null, 2))
+            console.log('Indexing foo: %o', kvv)
             if (kvv.value && kvv.value.value && kvv.value.value.content) {
               myValue = kvv.value.value.content.foo
               console.log('new value', myValue)
